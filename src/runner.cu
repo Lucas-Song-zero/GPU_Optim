@@ -173,6 +173,18 @@ void run_gemm_1d_block_tiling(int M, int N, int K, float alpha, float *A, float 
         <<<gridDim, blockDim>>>(M, N, K, alpha, A, B, beta, C);
 }
 
+// run 2D block tiling gemm
+void run_gemm_2d_block_tiling(int M, int N, int K, float alpha, float *A, float *B, float beta, float *C){
+  const uint TM = 8, TN = 8, BM = 32, BN = 64, BK = 64;
+  dim3 gridDim(div_ceil(M, BM), div_ceil(N, BN));
+  dim3 blockDim(div_ceil(BM*BN, TM*TN));
+  cudaFuncSetAttribute(gemm_2d_block_tiling<BM,BK,BN,TM,TN>,
+                      cudaFuncAttributePreferredSharedMemoryCarveout,
+                      cudaSharedmemCarveoutMaxShared);
+  gemm_2d_block_tiling<BM,BK,BN,TM,TN>
+      <<<gridDim, blockDim>>>(M, N, K, alpha, A, B, beta, C);
+}
+
 void run_kernel(int kernel_num, int M, int N, int K, float alpha, float *A, float *B, float beta, float *C, cublasHandle_t handle){
     switch(kernel_num){
         case 0:
@@ -189,6 +201,9 @@ void run_kernel(int kernel_num, int M, int N, int K, float alpha, float *A, floa
             break;
         case 4:
             run_gemm_1d_block_tiling(M, N, K, alpha, A, B, beta, C);
+            break;
+        case 5:
+            run_gemm_2d_block_tiling(M, N, K, alpha, A, B, beta, C);
             break;
         default:
             throw std::invalid_argument("Wrong kernel number, undefined");
