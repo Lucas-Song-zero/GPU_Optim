@@ -162,7 +162,7 @@ void run_gemm_shared_mem(int M, int N, int K, float alpha, float *A, float *B, f
 
 // run 1D block tiling gemm
 void run_gemm_1d_block_tiling(int M, int N, int K, float alpha, float *A, float *B, float beta, float *C){
-    const uint TM = 8, BM = 32, BN = 32, BK = 64;
+    const uint TM = 8, BM = 64, BN = 64, BK = 8;
     dim3 gridDim(div_ceil(M, BM), div_ceil(N, BN));
     dim3 blockDim(div_ceil(BM*BN,TM));
     // same as run_gemm_shared_mem, we carveout L1 cache
@@ -175,13 +175,25 @@ void run_gemm_1d_block_tiling(int M, int N, int K, float alpha, float *A, float 
 
 // run 2D block tiling gemm
 void run_gemm_2d_block_tiling(int M, int N, int K, float alpha, float *A, float *B, float beta, float *C){
-  const uint TM = 8, TN = 8, BM = 32, BN = 64, BK = 64;
+  const uint TM = 8, TN = 8, BM = 128, BN = 128, BK = 8;
   dim3 gridDim(div_ceil(M, BM), div_ceil(N, BN));
   dim3 blockDim(div_ceil(BM*BN, TM*TN));
-  cudaFuncSetAttribute(gemm_2d_block_tiling<BM,BK,BN,TM,TN>,
+  cudaFuncSetAttribute(gemm_2d_block_tiling<BM,BN,BK,TM,TN>,
                       cudaFuncAttributePreferredSharedMemoryCarveout,
                       cudaSharedmemCarveoutMaxShared);
-  gemm_2d_block_tiling<BM,BK,BN,TM,TN>
+  gemm_2d_block_tiling<BM,BN,BK,TM,TN>
+      <<<gridDim, blockDim>>>(M, N, K, alpha, A, B, beta, C);
+}
+
+// run vectorized memory read and write gemm
+void run_gemm_vectorize(int M, int N, int K, float alpha, float *A, float *B, float beta, float *C){
+  const uint TM = 8, TN = 8, BK = 8, BM = 128, BN = 128;
+  dim3 gridDim(div_ceil(M, BM), div_ceil(N, BN));
+  dim3 blockDim((BM * BN) / (TM * TN));
+  cudaFuncSetAttribute(gemm_vectorize<BM,BN,BK,TM,TN>,
+                      cudaFuncAttributePreferredSharedMemoryCarveout,
+                      cudaSharedmemCarveoutMaxShared);
+  gemm_vectorize<BM, BN, BK, TM, TN>
       <<<gridDim, blockDim>>>(M, N, K, alpha, A, B, beta, C);
 }
 
@@ -204,6 +216,9 @@ void run_kernel(int kernel_num, int M, int N, int K, float alpha, float *A, floa
             break;
         case 5:
             run_gemm_2d_block_tiling(M, N, K, alpha, A, B, beta, C);
+            break;
+        case 6:
+            run_gemm_vectorize(M, N, K, alpha, A, B, beta, C);
             break;
         default:
             throw std::invalid_argument("Wrong kernel number, undefined");

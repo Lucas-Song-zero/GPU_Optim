@@ -18,10 +18,6 @@ __global__ void gemm_2d_block_tiling(int M, int N, int K, float alpha, const flo
     // in TM=8, TN=8, BM=32, BN=64, BK=64 setting
     // threadIdx max is 32, thus miss half cols of the block
     // therefore, we need new loading pointers
-    // const uint aRow = threadIdx.x / BK;
-    // const uint aCol = threadIdx.x % BK;
-    // const uint bRow = threadIdx.x / BN;
-    // const uint bCol = threadIdx.x % BN;
     uint aRow = 0;
     uint bRow = 0;
     uint aCol = 0;
@@ -33,7 +29,7 @@ __global__ void gemm_2d_block_tiling(int M, int N, int K, float alpha, const flo
     const uint cRow = threadIdx.x / (BN/TN);
     const uint cCol = threadIdx.x % (BN/TN);
 
-    // initialize TM temporal registers
+    // initialize temporal registers
     float tmp[TM*TN] = {0.0};
     float regM[TM] = {0.0};
     float regN[TN] = {0.0};
