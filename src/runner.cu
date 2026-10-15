@@ -160,6 +160,19 @@ void run_gemm_shared_mem(int M, int N, int K, float alpha, float *A, float *B, f
         <<<gridDim, blockDim>>>(M, N, K, alpha, A, B, beta, C);
 }
 
+// run 1D block tiling gemm
+void run_gemm_1d_block_tiling(int M, int N, int K, float alpha, float *A, float *B, float beta, float *C){
+    const uint TM = 8, BM = 32, BN = 32, BK = 64;
+    dim3 gridDim(div_ceil(M, BM), div_ceil(N, BN));
+    dim3 blockDim(div_ceil(BM*BN,TM));
+    // same as run_gemm_shared_mem, we carveout L1 cache
+    cudaFuncSetAttribute(gemm_1d_block_tiling<BM,BK,BN,TM>,
+                        cudaFuncAttributePreferredSharedMemoryCarveout,
+                        cudaSharedmemCarveoutMaxShared);
+    gemm_1d_block_tiling<BM,BK,BN,TM>
+        <<<gridDim, blockDim>>>(M, N, K, alpha, A, B, beta, C);
+}
+
 void run_kernel(int kernel_num, int M, int N, int K, float alpha, float *A, float *B, float beta, float *C, cublasHandle_t handle){
     switch(kernel_num){
         case 0:
@@ -173,6 +186,9 @@ void run_kernel(int kernel_num, int M, int N, int K, float alpha, float *A, floa
             break;
         case 3:
             run_gemm_shared_mem(M, N, K, alpha, A, B, beta, C);
+            break;
+        case 4:
+            run_gemm_1d_block_tiling(M, N, K, alpha, A, B, beta, C);
             break;
         default:
             throw std::invalid_argument("Wrong kernel number, undefined");
