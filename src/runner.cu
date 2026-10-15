@@ -147,6 +147,19 @@ void run_gemm_coalescing(int M, int N, int K, float alpha, float *A, float *B, f
     gemm_coalescing<<<gridDim, blockDim>>>(M, N, K, alpha, A, B, beta, C);
 }
 
+// run gemm based on shared mem, to explicitly avoid accidentally L1 cache eviction
+void run_gemm_shared_mem(int M, int N, int K, float alpha, float *A, float *B, float beta, float *C){
+    dim3 gridDim(div_ceil(M, 32), div_ceil(N, 32));
+    dim3 blockDim(32,32);
+    // since we access GMEM only via SMEM, so we can carve out all L1 to SMEM
+    // this is good though making no difference since occupancy bound to reg and thread count not L1 cache capacity.
+    cudaFuncSetAttribute(gemm_shared_mem<32,32,32>,
+                        cudaFuncAttributePreferredSharedMemoryCarveout,
+                        cudaSharedmemCarveoutMaxShared);
+    gemm_shared_mem<32,32,32>
+        <<<gridDim, blockDim>>>(M, N, K, alpha, A, B, beta, C);
+}
+
 void run_kernel(int kernel_num, int M, int N, int K, float alpha, float *A, float *B, float beta, float *C, cublasHandle_t handle){
     switch(kernel_num){
         case 0:
@@ -157,6 +170,9 @@ void run_kernel(int kernel_num, int M, int N, int K, float alpha, float *A, floa
             break;
         case 2:
             run_gemm_coalescing(M, N, K, alpha, A, B, beta, C);
+            break;
+        case 3:
+            run_gemm_shared_mem(M, N, K, alpha, A, B, beta, C);
             break;
         default:
             throw std::invalid_argument("Wrong kernel number, undefined");
