@@ -6,3 +6,4 @@
 #include "GEMM/4_1D_block_tiling.cuh"
 #include "GEMM/5_2D_block_tiling.cuh"
 #include "GEMM/6_vectorize.cuh"
+#include "GEMM/7_autotune.cuh"
