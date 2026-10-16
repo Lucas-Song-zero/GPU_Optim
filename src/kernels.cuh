@@ -7,3 +7,5 @@
 #include "GEMM/5_2D_block_tiling.cuh"
 #include "GEMM/6_vectorize.cuh"
 #include "GEMM/7_autotune.cuh"
+#include "GEMM/8_warp_tiling.cuh"
+#include "GEMM/8_warp_tiling_2.cuh"

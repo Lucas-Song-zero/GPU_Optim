@@ -197,6 +197,24 @@ void run_gemm_vectorize(int M, int N, int K, float alpha, float *A, float *B, fl
       <<<gridDim, blockDim>>>(M, N, K, alpha, A, B, beta, C);
 }
 
+// run warp tiling gemmm
+void run_gemm_warp_tiling(int M, int N, int K, float alpha, float *A, float *B, float beta, float *C){
+  const uint BN = 128, BM = 128, BK = 16, TM = 8, TN = 4, WMITER = 8, WNITER = 4;
+  dim3 gridDim(div_ceil(M, BM), div_ceil(N, BN));
+  dim3 blockDim(BM*BN / (WMITER*TM * WNITER*TN) * 32);
+  gemm_warp_tiling<BM, BN, BK, TM, TN, WMITER, WNITER>
+    <<<gridDim, blockDim>>>(M, N, K, alpha, A, B, beta, C);
+}
+
+// run warp tiling gemmm 2, use more systematic indexing method.
+void run_gemm_warp_tiling_2(int M, int N, int K, float alpha, float *A, float *B, float beta, float *C){
+  const uint BN = 128, BM = 128, BK = 16, TM = 8, TN = 8, WM = 64, WN = 32, LaneSizeN = 4;
+  dim3 gridDim(div_ceil(M, BM), div_ceil(N, BN));
+  dim3 blockDim(BM*BN / (WM * WN) * 32);
+  gemm_warp_tiling_organized<BM, BN, BK, WM, WN, LaneSizeN, TM, TN>
+    <<<gridDim, blockDim>>>(M, N, K, alpha, A, B, beta, C);
+}
+
 void run_kernel(int kernel_num, int M, int N, int K, float alpha, float *A, float *B, float beta, float *C, cublasHandle_t handle){
     switch(kernel_num){
         case 0:
@@ -219,6 +237,15 @@ void run_kernel(int kernel_num, int M, int N, int K, float alpha, float *A, floa
             break;
         case 6:
             run_gemm_vectorize(M, N, K, alpha, A, B, beta, C);
+            break;
+        case 7:
+            throw std::invalid_argument("Autotune is used by Python, not supported in runner.cu yet");
+            break;
+        case 8:
+            run_gemm_warp_tiling(M, N, K, alpha, A, B, beta, C);
+            break;
+        case 9:
+            run_gemm_warp_tiling_2(M, N, K, alpha, A, B, beta, C);
             break;
         default:
             throw std::invalid_argument("Wrong kernel number, undefined");
