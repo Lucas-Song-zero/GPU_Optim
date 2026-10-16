@@ -22,8 +22,6 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 RESULTS_JSON = HERE / "results.json"
 
-PARAMS = ("BM", "BN", "BK", "TM", "TN")
-
 
 def load(path: Path) -> list[dict]:
     with path.open() as f:
@@ -31,8 +29,14 @@ def load(path: Path) -> list[dict]:
 
 
 def cfg_str(r: dict) -> str:
-    return (f"threads={r['threads']:4d}  "
-            + " ".join(f"{p}={r[p]:3d}" for p in PARAMS))
+    parts = [f"threads={r['threads']:4d}"]
+    if "WM" in r:  # warp-tiling record
+        for p in ("BM", "BN", "BK", "WM", "WN", "LaneSizeN", "TM", "TN"):
+            parts.append(f"{p}={r[p]:3d}")
+    else:
+        for p in ("BM", "BN", "BK", "TM", "TN"):
+            parts.append(f"{p}={r[p]:3d}")
+    return "  ".join(parts)
 
 
 def group_by_size(records: list[dict]) -> dict[int, list[dict]]:

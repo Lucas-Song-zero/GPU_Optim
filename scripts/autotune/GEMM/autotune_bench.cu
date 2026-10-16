@@ -3,103 +3,138 @@
 #include <cstdio>
 #include <cstdlib>
 
-#define VEC_CONFIG 1
-#include "GEMM/7_autotune.cuh"
+#include "GEMM/9_autotune_more.cuh"
 
-struct CfgInfo { int threads, BM, BN, BK, TM, TN; };
+struct CfgInfo { int threads, BM, BN, BK, WM, WN, LaneSizeN, TM, TN; };
 static const CfgInfo CFG[] = {
-    {256, 64, 64, 8, 4, 4},
-    {128, 64, 64, 8, 4, 8},
-    {128, 64, 64, 8, 8, 4},
-    {64, 64, 64, 8, 8, 8},
-    {256, 64, 64, 16, 4, 4},
-    {128, 64, 64, 16, 4, 8},
-    {128, 64, 64, 16, 8, 4},
-    {64, 64, 64, 16, 8, 8},
-    {256, 64, 64, 32, 4, 4},
-    {128, 64, 64, 32, 4, 8},
-    {128, 64, 64, 32, 8, 4},
-    {64, 64, 64, 32, 8, 8},
-    {512, 64, 128, 8, 4, 4},
-    {256, 64, 128, 8, 4, 8},
-    {256, 64, 128, 8, 8, 4},
-    {128, 64, 128, 8, 8, 8},
-    {512, 64, 128, 16, 4, 4},
-    {256, 64, 128, 16, 4, 8},
-    {256, 64, 128, 16, 8, 4},
-    {128, 64, 128, 16, 8, 8},
-    {512, 64, 128, 32, 4, 4},
-    {256, 64, 128, 32, 4, 8},
-    {256, 64, 128, 32, 8, 4},
-    {128, 64, 128, 32, 8, 8},
-    {1024, 64, 256, 8, 4, 4},
-    {512, 64, 256, 8, 4, 8},
-    {512, 64, 256, 8, 8, 4},
-    {256, 64, 256, 8, 8, 8},
-    {1024, 64, 256, 16, 4, 4},
-    {512, 64, 256, 16, 4, 8},
-    {512, 64, 256, 16, 8, 4},
-    {256, 64, 256, 16, 8, 8},
-    {1024, 64, 256, 32, 4, 4},
-    {512, 64, 256, 32, 4, 8},
-    {512, 64, 256, 32, 8, 4},
-    {256, 64, 256, 32, 8, 8},
-    {512, 128, 64, 8, 4, 4},
-    {256, 128, 64, 8, 4, 8},
-    {256, 128, 64, 8, 8, 4},
-    {128, 128, 64, 8, 8, 8},
-    {512, 128, 64, 16, 4, 4},
-    {256, 128, 64, 16, 4, 8},
-    {256, 128, 64, 16, 8, 4},
-    {128, 128, 64, 16, 8, 8},
-    {512, 128, 64, 32, 4, 4},
-    {256, 128, 64, 32, 4, 8},
-    {256, 128, 64, 32, 8, 4},
-    {128, 128, 64, 32, 8, 8},
-    {1024, 128, 128, 8, 4, 4},
-    {512, 128, 128, 8, 4, 8},
-    {512, 128, 128, 8, 8, 4},
-    {256, 128, 128, 8, 8, 8},
-    {1024, 128, 128, 16, 4, 4},
-    {512, 128, 128, 16, 4, 8},
-    {512, 128, 128, 16, 8, 4},
-    {256, 128, 128, 16, 8, 8},
-    {1024, 128, 128, 32, 4, 4},
-    {512, 128, 128, 32, 4, 8},
-    {512, 128, 128, 32, 8, 4},
-    {256, 128, 128, 32, 8, 8},
-    {1024, 128, 256, 8, 4, 8},
-    {1024, 128, 256, 8, 8, 4},
-    {512, 128, 256, 8, 8, 8},
-    {1024, 128, 256, 16, 4, 8},
-    {1024, 128, 256, 16, 8, 4},
-    {512, 128, 256, 16, 8, 8},
-    {1024, 128, 256, 32, 4, 8},
-    {1024, 128, 256, 32, 8, 4},
-    {512, 128, 256, 32, 8, 8},
-    {1024, 256, 64, 8, 4, 4},
-    {512, 256, 64, 8, 4, 8},
-    {512, 256, 64, 8, 8, 4},
-    {256, 256, 64, 8, 8, 8},
-    {1024, 256, 64, 16, 4, 4},
-    {512, 256, 64, 16, 4, 8},
-    {512, 256, 64, 16, 8, 4},
-    {256, 256, 64, 16, 8, 8},
-    {1024, 256, 64, 32, 4, 4},
-    {512, 256, 64, 32, 4, 8},
-    {512, 256, 64, 32, 8, 4},
-    {256, 256, 64, 32, 8, 8},
-    {1024, 256, 128, 8, 4, 8},
-    {1024, 256, 128, 8, 8, 4},
-    {512, 256, 128, 8, 8, 8},
-    {1024, 256, 128, 16, 4, 8},
-    {1024, 256, 128, 16, 8, 4},
-    {512, 256, 128, 16, 8, 8},
-    {1024, 256, 128, 32, 4, 8},
-    {1024, 256, 128, 32, 8, 4},
-    {512, 256, 128, 32, 8, 8},
-    {1024, 256, 256, 8, 8, 8},
-    {1024, 256, 256, 16, 8, 8},
+    {128, 64, 64, 16, 32, 32, 4, 4, 4},
+    {128, 64, 64, 16, 32, 32, 4, 4, 8},
+    {128, 64, 64, 16, 32, 32, 8, 4, 4},
+    {128, 64, 64, 16, 32, 32, 8, 8, 4},
+    {64, 64, 64, 16, 32, 64, 4, 4, 4},
+    {64, 64, 64, 16, 32, 64, 4, 4, 8},
+    {64, 64, 64, 16, 32, 64, 8, 4, 4},
+    {64, 64, 64, 16, 32, 64, 8, 4, 8},
+    {64, 64, 64, 16, 32, 64, 8, 8, 4},
+    {64, 64, 64, 16, 32, 64, 8, 8, 8},
+    {64, 64, 64, 16, 64, 32, 4, 4, 4},
+    {64, 64, 64, 16, 64, 32, 4, 4, 8},
+    {64, 64, 64, 16, 64, 32, 4, 8, 4},
+    {64, 64, 64, 16, 64, 32, 4, 8, 8},
+    {64, 64, 64, 16, 64, 32, 8, 4, 4},
+    {64, 64, 64, 16, 64, 32, 8, 8, 4},
+    {128, 64, 64, 32, 32, 32, 4, 4, 4},
+    {128, 64, 64, 32, 32, 32, 4, 4, 8},
+    {128, 64, 64, 32, 32, 32, 8, 4, 4},
+    {128, 64, 64, 32, 32, 32, 8, 8, 4},
+    {64, 64, 64, 32, 32, 64, 4, 4, 4},
+    {64, 64, 64, 32, 32, 64, 4, 4, 8},
+    {64, 64, 64, 32, 32, 64, 8, 4, 4},
+    {64, 64, 64, 32, 32, 64, 8, 4, 8},
+    {64, 64, 64, 32, 32, 64, 8, 8, 4},
+    {64, 64, 64, 32, 32, 64, 8, 8, 8},
+    {64, 64, 64, 32, 64, 32, 4, 4, 4},
+    {64, 64, 64, 32, 64, 32, 4, 4, 8},
+    {64, 64, 64, 32, 64, 32, 4, 8, 4},
+    {64, 64, 64, 32, 64, 32, 4, 8, 8},
+    {64, 64, 64, 32, 64, 32, 8, 4, 4},
+    {64, 64, 64, 32, 64, 32, 8, 8, 4},
+    {256, 64, 128, 16, 32, 32, 4, 4, 4},
+    {256, 64, 128, 16, 32, 32, 4, 4, 8},
+    {256, 64, 128, 16, 32, 32, 8, 4, 4},
+    {256, 64, 128, 16, 32, 32, 8, 8, 4},
+    {128, 64, 128, 16, 32, 64, 4, 4, 4},
+    {128, 64, 128, 16, 32, 64, 4, 4, 8},
+    {128, 64, 128, 16, 32, 64, 8, 4, 4},
+    {128, 64, 128, 16, 32, 64, 8, 4, 8},
+    {128, 64, 128, 16, 32, 64, 8, 8, 4},
+    {128, 64, 128, 16, 32, 64, 8, 8, 8},
+    {128, 64, 128, 16, 64, 32, 4, 4, 4},
+    {128, 64, 128, 16, 64, 32, 4, 4, 8},
+    {128, 64, 128, 16, 64, 32, 4, 8, 4},
+    {128, 64, 128, 16, 64, 32, 4, 8, 8},
+    {128, 64, 128, 16, 64, 32, 8, 4, 4},
+    {128, 64, 128, 16, 64, 32, 8, 8, 4},
+    {256, 64, 128, 32, 32, 32, 4, 4, 4},
+    {256, 64, 128, 32, 32, 32, 4, 4, 8},
+    {256, 64, 128, 32, 32, 32, 8, 4, 4},
+    {256, 64, 128, 32, 32, 32, 8, 8, 4},
+    {128, 64, 128, 32, 32, 64, 4, 4, 4},
+    {128, 64, 128, 32, 32, 64, 4, 4, 8},
+    {128, 64, 128, 32, 32, 64, 8, 4, 4},
+    {128, 64, 128, 32, 32, 64, 8, 4, 8},
+    {128, 64, 128, 32, 32, 64, 8, 8, 4},
+    {128, 64, 128, 32, 32, 64, 8, 8, 8},
+    {128, 64, 128, 32, 64, 32, 4, 4, 4},
+    {128, 64, 128, 32, 64, 32, 4, 4, 8},
+    {128, 64, 128, 32, 64, 32, 4, 8, 4},
+    {128, 64, 128, 32, 64, 32, 4, 8, 8},
+    {128, 64, 128, 32, 64, 32, 8, 4, 4},
+    {128, 64, 128, 32, 64, 32, 8, 8, 4},
+    {256, 128, 64, 16, 32, 32, 4, 4, 4},
+    {256, 128, 64, 16, 32, 32, 4, 4, 8},
+    {256, 128, 64, 16, 32, 32, 8, 4, 4},
+    {256, 128, 64, 16, 32, 32, 8, 8, 4},
+    {128, 128, 64, 16, 32, 64, 4, 4, 4},
+    {128, 128, 64, 16, 32, 64, 4, 4, 8},
+    {128, 128, 64, 16, 32, 64, 8, 4, 4},
+    {128, 128, 64, 16, 32, 64, 8, 4, 8},
+    {128, 128, 64, 16, 32, 64, 8, 8, 4},
+    {128, 128, 64, 16, 32, 64, 8, 8, 8},
+    {128, 128, 64, 16, 64, 32, 4, 4, 4},
+    {128, 128, 64, 16, 64, 32, 4, 4, 8},
+    {128, 128, 64, 16, 64, 32, 4, 8, 4},
+    {128, 128, 64, 16, 64, 32, 4, 8, 8},
+    {128, 128, 64, 16, 64, 32, 8, 4, 4},
+    {128, 128, 64, 16, 64, 32, 8, 8, 4},
+    {256, 128, 64, 32, 32, 32, 4, 4, 4},
+    {256, 128, 64, 32, 32, 32, 4, 4, 8},
+    {256, 128, 64, 32, 32, 32, 8, 4, 4},
+    {256, 128, 64, 32, 32, 32, 8, 8, 4},
+    {128, 128, 64, 32, 32, 64, 4, 4, 4},
+    {128, 128, 64, 32, 32, 64, 4, 4, 8},
+    {128, 128, 64, 32, 32, 64, 8, 4, 4},
+    {128, 128, 64, 32, 32, 64, 8, 4, 8},
+    {128, 128, 64, 32, 32, 64, 8, 8, 4},
+    {128, 128, 64, 32, 32, 64, 8, 8, 8},
+    {128, 128, 64, 32, 64, 32, 4, 4, 4},
+    {128, 128, 64, 32, 64, 32, 4, 4, 8},
+    {128, 128, 64, 32, 64, 32, 4, 8, 4},
+    {128, 128, 64, 32, 64, 32, 4, 8, 8},
+    {128, 128, 64, 32, 64, 32, 8, 4, 4},
+    {128, 128, 64, 32, 64, 32, 8, 8, 4},
+    {512, 128, 128, 16, 32, 32, 4, 4, 4},
+    {512, 128, 128, 16, 32, 32, 4, 4, 8},
+    {512, 128, 128, 16, 32, 32, 8, 4, 4},
+    {512, 128, 128, 16, 32, 32, 8, 8, 4},
+    {256, 128, 128, 16, 32, 64, 4, 4, 4},
+    {256, 128, 128, 16, 32, 64, 4, 4, 8},
+    {256, 128, 128, 16, 32, 64, 8, 4, 4},
+    {256, 128, 128, 16, 32, 64, 8, 4, 8},
+    {256, 128, 128, 16, 32, 64, 8, 8, 4},
+    {256, 128, 128, 16, 32, 64, 8, 8, 8},
+    {256, 128, 128, 16, 64, 32, 4, 4, 4},
+    {256, 128, 128, 16, 64, 32, 4, 4, 8},
+    {256, 128, 128, 16, 64, 32, 4, 8, 4},
+    {256, 128, 128, 16, 64, 32, 4, 8, 8},
+    {256, 128, 128, 16, 64, 32, 8, 4, 4},
+    {256, 128, 128, 16, 64, 32, 8, 8, 4},
+    {512, 128, 128, 32, 32, 32, 4, 4, 4},
+    {512, 128, 128, 32, 32, 32, 4, 4, 8},
+    {512, 128, 128, 32, 32, 32, 8, 4, 4},
+    {512, 128, 128, 32, 32, 32, 8, 8, 4},
+    {256, 128, 128, 32, 32, 64, 4, 4, 4},
+    {256, 128, 128, 32, 32, 64, 4, 4, 8},
+    {256, 128, 128, 32, 32, 64, 8, 4, 4},
+    {256, 128, 128, 32, 32, 64, 8, 4, 8},
+    {256, 128, 128, 32, 32, 64, 8, 8, 4},
+    {256, 128, 128, 32, 32, 64, 8, 8, 8},
+    {256, 128, 128, 32, 64, 32, 4, 4, 4},
+    {256, 128, 128, 32, 64, 32, 4, 4, 8},
+    {256, 128, 128, 32, 64, 32, 4, 8, 4},
+    {256, 128, 128, 32, 64, 32, 4, 8, 8},
+    {256, 128, 128, 32, 64, 32, 8, 4, 4},
+    {256, 128, 128, 32, 64, 32, 8, 8, 4},
 };
 static const int NUM_CONFIGS = (int)(sizeof(CFG) / sizeof(CFG[0]));
 
@@ -107,555 +142,771 @@ static void launch(int cfg, int M, int N, int K, float alpha,
                    float *A, float *B, float beta, float *C) {
     switch (cfg) {
         case 0: {
-            constexpr int T = 256, BM = 64, BN = 64, BK = 8, TM = 4, TN = 4;
+            constexpr int BM = 64, BN = 64, BK = 16, WM = 32, WN = 32, LaneSizeN = 4, TM = 4, TN = 4;
             dim3 grid((M + BM - 1) / BM, (N + BN - 1) / BN);
-            gemm_tunable<T, BM, BN, BK, TM, TN><<<grid, T>>>(M, N, K, alpha, A, B, beta, C);
+            gemm_warp_tunable<BM, BN, BK, WM, WN, LaneSizeN, TM, TN><<<grid, 128>>>(M, N, K, alpha, A, B, beta, C);
             break;
         }
         case 1: {
-            constexpr int T = 128, BM = 64, BN = 64, BK = 8, TM = 4, TN = 8;
+            constexpr int BM = 64, BN = 64, BK = 16, WM = 32, WN = 32, LaneSizeN = 4, TM = 4, TN = 8;
             dim3 grid((M + BM - 1) / BM, (N + BN - 1) / BN);
-            gemm_tunable<T, BM, BN, BK, TM, TN><<<grid, T>>>(M, N, K, alpha, A, B, beta, C);
+            gemm_warp_tunable<BM, BN, BK, WM, WN, LaneSizeN, TM, TN><<<grid, 128>>>(M, N, K, alpha, A, B, beta, C);
             break;
         }
         case 2: {
-            constexpr int T = 128, BM = 64, BN = 64, BK = 8, TM = 8, TN = 4;
+            constexpr int BM = 64, BN = 64, BK = 16, WM = 32, WN = 32, LaneSizeN = 8, TM = 4, TN = 4;
             dim3 grid((M + BM - 1) / BM, (N + BN - 1) / BN);
-            gemm_tunable<T, BM, BN, BK, TM, TN><<<grid, T>>>(M, N, K, alpha, A, B, beta, C);
+            gemm_warp_tunable<BM, BN, BK, WM, WN, LaneSizeN, TM, TN><<<grid, 128>>>(M, N, K, alpha, A, B, beta, C);
             break;
         }
         case 3: {
-            constexpr int T = 64, BM = 64, BN = 64, BK = 8, TM = 8, TN = 8;
+            constexpr int BM = 64, BN = 64, BK = 16, WM = 32, WN = 32, LaneSizeN = 8, TM = 8, TN = 4;
             dim3 grid((M + BM - 1) / BM, (N + BN - 1) / BN);
-            gemm_tunable<T, BM, BN, BK, TM, TN><<<grid, T>>>(M, N, K, alpha, A, B, beta, C);
+            gemm_warp_tunable<BM, BN, BK, WM, WN, LaneSizeN, TM, TN><<<grid, 128>>>(M, N, K, alpha, A, B, beta, C);
             break;
         }
         case 4: {
-            constexpr int T = 256, BM = 64, BN = 64, BK = 16, TM = 4, TN = 4;
+            constexpr int BM = 64, BN = 64, BK = 16, WM = 32, WN = 64, LaneSizeN = 4, TM = 4, TN = 4;
             dim3 grid((M + BM - 1) / BM, (N + BN - 1) / BN);
-            gemm_tunable<T, BM, BN, BK, TM, TN><<<grid, T>>>(M, N, K, alpha, A, B, beta, C);
+            gemm_warp_tunable<BM, BN, BK, WM, WN, LaneSizeN, TM, TN><<<grid, 64>>>(M, N, K, alpha, A, B, beta, C);
             break;
         }
         case 5: {
-            constexpr int T = 128, BM = 64, BN = 64, BK = 16, TM = 4, TN = 8;
+            constexpr int BM = 64, BN = 64, BK = 16, WM = 32, WN = 64, LaneSizeN = 4, TM = 4, TN = 8;
             dim3 grid((M + BM - 1) / BM, (N + BN - 1) / BN);
-            gemm_tunable<T, BM, BN, BK, TM, TN><<<grid, T>>>(M, N, K, alpha, A, B, beta, C);
+            gemm_warp_tunable<BM, BN, BK, WM, WN, LaneSizeN, TM, TN><<<grid, 64>>>(M, N, K, alpha, A, B, beta, C);
             break;
         }
         case 6: {
-            constexpr int T = 128, BM = 64, BN = 64, BK = 16, TM = 8, TN = 4;
+            constexpr int BM = 64, BN = 64, BK = 16, WM = 32, WN = 64, LaneSizeN = 8, TM = 4, TN = 4;
             dim3 grid((M + BM - 1) / BM, (N + BN - 1) / BN);
-            gemm_tunable<T, BM, BN, BK, TM, TN><<<grid, T>>>(M, N, K, alpha, A, B, beta, C);
+            gemm_warp_tunable<BM, BN, BK, WM, WN, LaneSizeN, TM, TN><<<grid, 64>>>(M, N, K, alpha, A, B, beta, C);
             break;
         }
         case 7: {
-            constexpr int T = 64, BM = 64, BN = 64, BK = 16, TM = 8, TN = 8;
+            constexpr int BM = 64, BN = 64, BK = 16, WM = 32, WN = 64, LaneSizeN = 8, TM = 4, TN = 8;
             dim3 grid((M + BM - 1) / BM, (N + BN - 1) / BN);
-            gemm_tunable<T, BM, BN, BK, TM, TN><<<grid, T>>>(M, N, K, alpha, A, B, beta, C);
+            gemm_warp_tunable<BM, BN, BK, WM, WN, LaneSizeN, TM, TN><<<grid, 64>>>(M, N, K, alpha, A, B, beta, C);
             break;
         }
         case 8: {
-            constexpr int T = 256, BM = 64, BN = 64, BK = 32, TM = 4, TN = 4;
+            constexpr int BM = 64, BN = 64, BK = 16, WM = 32, WN = 64, LaneSizeN = 8, TM = 8, TN = 4;
             dim3 grid((M + BM - 1) / BM, (N + BN - 1) / BN);
-            gemm_tunable<T, BM, BN, BK, TM, TN><<<grid, T>>>(M, N, K, alpha, A, B, beta, C);
+            gemm_warp_tunable<BM, BN, BK, WM, WN, LaneSizeN, TM, TN><<<grid, 64>>>(M, N, K, alpha, A, B, beta, C);
             break;
         }
         case 9: {
-            constexpr int T = 128, BM = 64, BN = 64, BK = 32, TM = 4, TN = 8;
+            constexpr int BM = 64, BN = 64, BK = 16, WM = 32, WN = 64, LaneSizeN = 8, TM = 8, TN = 8;
             dim3 grid((M + BM - 1) / BM, (N + BN - 1) / BN);
-            gemm_tunable<T, BM, BN, BK, TM, TN><<<grid, T>>>(M, N, K, alpha, A, B, beta, C);
+            gemm_warp_tunable<BM, BN, BK, WM, WN, LaneSizeN, TM, TN><<<grid, 64>>>(M, N, K, alpha, A, B, beta, C);
             break;
         }
         case 10: {
-            constexpr int T = 128, BM = 64, BN = 64, BK = 32, TM = 8, TN = 4;
+            constexpr int BM = 64, BN = 64, BK = 16, WM = 64, WN = 32, LaneSizeN = 4, TM = 4, TN = 4;
             dim3 grid((M + BM - 1) / BM, (N + BN - 1) / BN);
-            gemm_tunable<T, BM, BN, BK, TM, TN><<<grid, T>>>(M, N, K, alpha, A, B, beta, C);
+            gemm_warp_tunable<BM, BN, BK, WM, WN, LaneSizeN, TM, TN><<<grid, 64>>>(M, N, K, alpha, A, B, beta, C);
             break;
         }
         case 11: {
-            constexpr int T = 64, BM = 64, BN = 64, BK = 32, TM = 8, TN = 8;
+            constexpr int BM = 64, BN = 64, BK = 16, WM = 64, WN = 32, LaneSizeN = 4, TM = 4, TN = 8;
             dim3 grid((M + BM - 1) / BM, (N + BN - 1) / BN);
-            gemm_tunable<T, BM, BN, BK, TM, TN><<<grid, T>>>(M, N, K, alpha, A, B, beta, C);
+            gemm_warp_tunable<BM, BN, BK, WM, WN, LaneSizeN, TM, TN><<<grid, 64>>>(M, N, K, alpha, A, B, beta, C);
             break;
         }
         case 12: {
-            constexpr int T = 512, BM = 64, BN = 128, BK = 8, TM = 4, TN = 4;
+            constexpr int BM = 64, BN = 64, BK = 16, WM = 64, WN = 32, LaneSizeN = 4, TM = 8, TN = 4;
             dim3 grid((M + BM - 1) / BM, (N + BN - 1) / BN);
-            gemm_tunable<T, BM, BN, BK, TM, TN><<<grid, T>>>(M, N, K, alpha, A, B, beta, C);
+            gemm_warp_tunable<BM, BN, BK, WM, WN, LaneSizeN, TM, TN><<<grid, 64>>>(M, N, K, alpha, A, B, beta, C);
             break;
         }
         case 13: {
-            constexpr int T = 256, BM = 64, BN = 128, BK = 8, TM = 4, TN = 8;
+            constexpr int BM = 64, BN = 64, BK = 16, WM = 64, WN = 32, LaneSizeN = 4, TM = 8, TN = 8;
             dim3 grid((M + BM - 1) / BM, (N + BN - 1) / BN);
-            gemm_tunable<T, BM, BN, BK, TM, TN><<<grid, T>>>(M, N, K, alpha, A, B, beta, C);
+            gemm_warp_tunable<BM, BN, BK, WM, WN, LaneSizeN, TM, TN><<<grid, 64>>>(M, N, K, alpha, A, B, beta, C);
             break;
         }
         case 14: {
-            constexpr int T = 256, BM = 64, BN = 128, BK = 8, TM = 8, TN = 4;
+            constexpr int BM = 64, BN = 64, BK = 16, WM = 64, WN = 32, LaneSizeN = 8, TM = 4, TN = 4;
             dim3 grid((M + BM - 1) / BM, (N + BN - 1) / BN);
-            gemm_tunable<T, BM, BN, BK, TM, TN><<<grid, T>>>(M, N, K, alpha, A, B, beta, C);
+            gemm_warp_tunable<BM, BN, BK, WM, WN, LaneSizeN, TM, TN><<<grid, 64>>>(M, N, K, alpha, A, B, beta, C);
             break;
         }
         case 15: {
-            constexpr int T = 128, BM = 64, BN = 128, BK = 8, TM = 8, TN = 8;
+            constexpr int BM = 64, BN = 64, BK = 16, WM = 64, WN = 32, LaneSizeN = 8, TM = 8, TN = 4;
             dim3 grid((M + BM - 1) / BM, (N + BN - 1) / BN);
-            gemm_tunable<T, BM, BN, BK, TM, TN><<<grid, T>>>(M, N, K, alpha, A, B, beta, C);
+            gemm_warp_tunable<BM, BN, BK, WM, WN, LaneSizeN, TM, TN><<<grid, 64>>>(M, N, K, alpha, A, B, beta, C);
             break;
         }
         case 16: {
-            constexpr int T = 512, BM = 64, BN = 128, BK = 16, TM = 4, TN = 4;
+            constexpr int BM = 64, BN = 64, BK = 32, WM = 32, WN = 32, LaneSizeN = 4, TM = 4, TN = 4;
             dim3 grid((M + BM - 1) / BM, (N + BN - 1) / BN);
-            gemm_tunable<T, BM, BN, BK, TM, TN><<<grid, T>>>(M, N, K, alpha, A, B, beta, C);
+            gemm_warp_tunable<BM, BN, BK, WM, WN, LaneSizeN, TM, TN><<<grid, 128>>>(M, N, K, alpha, A, B, beta, C);
             break;
         }
         case 17: {
-            constexpr int T = 256, BM = 64, BN = 128, BK = 16, TM = 4, TN = 8;
+            constexpr int BM = 64, BN = 64, BK = 32, WM = 32, WN = 32, LaneSizeN = 4, TM = 4, TN = 8;
             dim3 grid((M + BM - 1) / BM, (N + BN - 1) / BN);
-            gemm_tunable<T, BM, BN, BK, TM, TN><<<grid, T>>>(M, N, K, alpha, A, B, beta, C);
+            gemm_warp_tunable<BM, BN, BK, WM, WN, LaneSizeN, TM, TN><<<grid, 128>>>(M, N, K, alpha, A, B, beta, C);
             break;
         }
         case 18: {
-            constexpr int T = 256, BM = 64, BN = 128, BK = 16, TM = 8, TN = 4;
+            constexpr int BM = 64, BN = 64, BK = 32, WM = 32, WN = 32, LaneSizeN = 8, TM = 4, TN = 4;
             dim3 grid((M + BM - 1) / BM, (N + BN - 1) / BN);
-            gemm_tunable<T, BM, BN, BK, TM, TN><<<grid, T>>>(M, N, K, alpha, A, B, beta, C);
+            gemm_warp_tunable<BM, BN, BK, WM, WN, LaneSizeN, TM, TN><<<grid, 128>>>(M, N, K, alpha, A, B, beta, C);
             break;
         }
         case 19: {
-            constexpr int T = 128, BM = 64, BN = 128, BK = 16, TM = 8, TN = 8;
+            constexpr int BM = 64, BN = 64, BK = 32, WM = 32, WN = 32, LaneSizeN = 8, TM = 8, TN = 4;
             dim3 grid((M + BM - 1) / BM, (N + BN - 1) / BN);
-            gemm_tunable<T, BM, BN, BK, TM, TN><<<grid, T>>>(M, N, K, alpha, A, B, beta, C);
+            gemm_warp_tunable<BM, BN, BK, WM, WN, LaneSizeN, TM, TN><<<grid, 128>>>(M, N, K, alpha, A, B, beta, C);
             break;
         }
         case 20: {
-            constexpr int T = 512, BM = 64, BN = 128, BK = 32, TM = 4, TN = 4;
+            constexpr int BM = 64, BN = 64, BK = 32, WM = 32, WN = 64, LaneSizeN = 4, TM = 4, TN = 4;
             dim3 grid((M + BM - 1) / BM, (N + BN - 1) / BN);
-            gemm_tunable<T, BM, BN, BK, TM, TN><<<grid, T>>>(M, N, K, alpha, A, B, beta, C);
+            gemm_warp_tunable<BM, BN, BK, WM, WN, LaneSizeN, TM, TN><<<grid, 64>>>(M, N, K, alpha, A, B, beta, C);
             break;
         }
         case 21: {
-            constexpr int T = 256, BM = 64, BN = 128, BK = 32, TM = 4, TN = 8;
+            constexpr int BM = 64, BN = 64, BK = 32, WM = 32, WN = 64, LaneSizeN = 4, TM = 4, TN = 8;
             dim3 grid((M + BM - 1) / BM, (N + BN - 1) / BN);
-            gemm_tunable<T, BM, BN, BK, TM, TN><<<grid, T>>>(M, N, K, alpha, A, B, beta, C);
+            gemm_warp_tunable<BM, BN, BK, WM, WN, LaneSizeN, TM, TN><<<grid, 64>>>(M, N, K, alpha, A, B, beta, C);
             break;
         }
         case 22: {
-            constexpr int T = 256, BM = 64, BN = 128, BK = 32, TM = 8, TN = 4;
+            constexpr int BM = 64, BN = 64, BK = 32, WM = 32, WN = 64, LaneSizeN = 8, TM = 4, TN = 4;
             dim3 grid((M + BM - 1) / BM, (N + BN - 1) / BN);
-            gemm_tunable<T, BM, BN, BK, TM, TN><<<grid, T>>>(M, N, K, alpha, A, B, beta, C);
+            gemm_warp_tunable<BM, BN, BK, WM, WN, LaneSizeN, TM, TN><<<grid, 64>>>(M, N, K, alpha, A, B, beta, C);
             break;
         }
         case 23: {
-            constexpr int T = 128, BM = 64, BN = 128, BK = 32, TM = 8, TN = 8;
+            constexpr int BM = 64, BN = 64, BK = 32, WM = 32, WN = 64, LaneSizeN = 8, TM = 4, TN = 8;
             dim3 grid((M + BM - 1) / BM, (N + BN - 1) / BN);
-            gemm_tunable<T, BM, BN, BK, TM, TN><<<grid, T>>>(M, N, K, alpha, A, B, beta, C);
+            gemm_warp_tunable<BM, BN, BK, WM, WN, LaneSizeN, TM, TN><<<grid, 64>>>(M, N, K, alpha, A, B, beta, C);
             break;
         }
         case 24: {
-            constexpr int T = 1024, BM = 64, BN = 256, BK = 8, TM = 4, TN = 4;
+            constexpr int BM = 64, BN = 64, BK = 32, WM = 32, WN = 64, LaneSizeN = 8, TM = 8, TN = 4;
             dim3 grid((M + BM - 1) / BM, (N + BN - 1) / BN);
-            gemm_tunable<T, BM, BN, BK, TM, TN><<<grid, T>>>(M, N, K, alpha, A, B, beta, C);
+            gemm_warp_tunable<BM, BN, BK, WM, WN, LaneSizeN, TM, TN><<<grid, 64>>>(M, N, K, alpha, A, B, beta, C);
             break;
         }
         case 25: {
-            constexpr int T = 512, BM = 64, BN = 256, BK = 8, TM = 4, TN = 8;
+            constexpr int BM = 64, BN = 64, BK = 32, WM = 32, WN = 64, LaneSizeN = 8, TM = 8, TN = 8;
             dim3 grid((M + BM - 1) / BM, (N + BN - 1) / BN);
-            gemm_tunable<T, BM, BN, BK, TM, TN><<<grid, T>>>(M, N, K, alpha, A, B, beta, C);
+            gemm_warp_tunable<BM, BN, BK, WM, WN, LaneSizeN, TM, TN><<<grid, 64>>>(M, N, K, alpha, A, B, beta, C);
             break;
         }
         case 26: {
-            constexpr int T = 512, BM = 64, BN = 256, BK = 8, TM = 8, TN = 4;
+            constexpr int BM = 64, BN = 64, BK = 32, WM = 64, WN = 32, LaneSizeN = 4, TM = 4, TN = 4;
             dim3 grid((M + BM - 1) / BM, (N + BN - 1) / BN);
-            gemm_tunable<T, BM, BN, BK, TM, TN><<<grid, T>>>(M, N, K, alpha, A, B, beta, C);
+            gemm_warp_tunable<BM, BN, BK, WM, WN, LaneSizeN, TM, TN><<<grid, 64>>>(M, N, K, alpha, A, B, beta, C);
             break;
         }
         case 27: {
-            constexpr int T = 256, BM = 64, BN = 256, BK = 8, TM = 8, TN = 8;
+            constexpr int BM = 64, BN = 64, BK = 32, WM = 64, WN = 32, LaneSizeN = 4, TM = 4, TN = 8;
             dim3 grid((M + BM - 1) / BM, (N + BN - 1) / BN);
-            gemm_tunable<T, BM, BN, BK, TM, TN><<<grid, T>>>(M, N, K, alpha, A, B, beta, C);
+            gemm_warp_tunable<BM, BN, BK, WM, WN, LaneSizeN, TM, TN><<<grid, 64>>>(M, N, K, alpha, A, B, beta, C);
             break;
         }
         case 28: {
-            constexpr int T = 1024, BM = 64, BN = 256, BK = 16, TM = 4, TN = 4;
+            constexpr int BM = 64, BN = 64, BK = 32, WM = 64, WN = 32, LaneSizeN = 4, TM = 8, TN = 4;
             dim3 grid((M + BM - 1) / BM, (N + BN - 1) / BN);
-            gemm_tunable<T, BM, BN, BK, TM, TN><<<grid, T>>>(M, N, K, alpha, A, B, beta, C);
+            gemm_warp_tunable<BM, BN, BK, WM, WN, LaneSizeN, TM, TN><<<grid, 64>>>(M, N, K, alpha, A, B, beta, C);
             break;
         }
         case 29: {
-            constexpr int T = 512, BM = 64, BN = 256, BK = 16, TM = 4, TN = 8;
+            constexpr int BM = 64, BN = 64, BK = 32, WM = 64, WN = 32, LaneSizeN = 4, TM = 8, TN = 8;
             dim3 grid((M + BM - 1) / BM, (N + BN - 1) / BN);
-            gemm_tunable<T, BM, BN, BK, TM, TN><<<grid, T>>>(M, N, K, alpha, A, B, beta, C);
+            gemm_warp_tunable<BM, BN, BK, WM, WN, LaneSizeN, TM, TN><<<grid, 64>>>(M, N, K, alpha, A, B, beta, C);
             break;
         }
         case 30: {
-            constexpr int T = 512, BM = 64, BN = 256, BK = 16, TM = 8, TN = 4;
+            constexpr int BM = 64, BN = 64, BK = 32, WM = 64, WN = 32, LaneSizeN = 8, TM = 4, TN = 4;
             dim3 grid((M + BM - 1) / BM, (N + BN - 1) / BN);
-            gemm_tunable<T, BM, BN, BK, TM, TN><<<grid, T>>>(M, N, K, alpha, A, B, beta, C);
+            gemm_warp_tunable<BM, BN, BK, WM, WN, LaneSizeN, TM, TN><<<grid, 64>>>(M, N, K, alpha, A, B, beta, C);
             break;
         }
         case 31: {
-            constexpr int T = 256, BM = 64, BN = 256, BK = 16, TM = 8, TN = 8;
+            constexpr int BM = 64, BN = 64, BK = 32, WM = 64, WN = 32, LaneSizeN = 8, TM = 8, TN = 4;
             dim3 grid((M + BM - 1) / BM, (N + BN - 1) / BN);
-            gemm_tunable<T, BM, BN, BK, TM, TN><<<grid, T>>>(M, N, K, alpha, A, B, beta, C);
+            gemm_warp_tunable<BM, BN, BK, WM, WN, LaneSizeN, TM, TN><<<grid, 64>>>(M, N, K, alpha, A, B, beta, C);
             break;
         }
         case 32: {
-            constexpr int T = 1024, BM = 64, BN = 256, BK = 32, TM = 4, TN = 4;
+            constexpr int BM = 64, BN = 128, BK = 16, WM = 32, WN = 32, LaneSizeN = 4, TM = 4, TN = 4;
             dim3 grid((M + BM - 1) / BM, (N + BN - 1) / BN);
-            gemm_tunable<T, BM, BN, BK, TM, TN><<<grid, T>>>(M, N, K, alpha, A, B, beta, C);
+            gemm_warp_tunable<BM, BN, BK, WM, WN, LaneSizeN, TM, TN><<<grid, 256>>>(M, N, K, alpha, A, B, beta, C);
             break;
         }
         case 33: {
-            constexpr int T = 512, BM = 64, BN = 256, BK = 32, TM = 4, TN = 8;
+            constexpr int BM = 64, BN = 128, BK = 16, WM = 32, WN = 32, LaneSizeN = 4, TM = 4, TN = 8;
             dim3 grid((M + BM - 1) / BM, (N + BN - 1) / BN);
-            gemm_tunable<T, BM, BN, BK, TM, TN><<<grid, T>>>(M, N, K, alpha, A, B, beta, C);
+            gemm_warp_tunable<BM, BN, BK, WM, WN, LaneSizeN, TM, TN><<<grid, 256>>>(M, N, K, alpha, A, B, beta, C);
             break;
         }
         case 34: {
-            constexpr int T = 512, BM = 64, BN = 256, BK = 32, TM = 8, TN = 4;
+            constexpr int BM = 64, BN = 128, BK = 16, WM = 32, WN = 32, LaneSizeN = 8, TM = 4, TN = 4;
             dim3 grid((M + BM - 1) / BM, (N + BN - 1) / BN);
-            gemm_tunable<T, BM, BN, BK, TM, TN><<<grid, T>>>(M, N, K, alpha, A, B, beta, C);
+            gemm_warp_tunable<BM, BN, BK, WM, WN, LaneSizeN, TM, TN><<<grid, 256>>>(M, N, K, alpha, A, B, beta, C);
             break;
         }
         case 35: {
-            constexpr int T = 256, BM = 64, BN = 256, BK = 32, TM = 8, TN = 8;
+            constexpr int BM = 64, BN = 128, BK = 16, WM = 32, WN = 32, LaneSizeN = 8, TM = 8, TN = 4;
             dim3 grid((M + BM - 1) / BM, (N + BN - 1) / BN);
-            gemm_tunable<T, BM, BN, BK, TM, TN><<<grid, T>>>(M, N, K, alpha, A, B, beta, C);
+            gemm_warp_tunable<BM, BN, BK, WM, WN, LaneSizeN, TM, TN><<<grid, 256>>>(M, N, K, alpha, A, B, beta, C);
             break;
         }
         case 36: {
-            constexpr int T = 512, BM = 128, BN = 64, BK = 8, TM = 4, TN = 4;
+            constexpr int BM = 64, BN = 128, BK = 16, WM = 32, WN = 64, LaneSizeN = 4, TM = 4, TN = 4;
             dim3 grid((M + BM - 1) / BM, (N + BN - 1) / BN);
-            gemm_tunable<T, BM, BN, BK, TM, TN><<<grid, T>>>(M, N, K, alpha, A, B, beta, C);
+            gemm_warp_tunable<BM, BN, BK, WM, WN, LaneSizeN, TM, TN><<<grid, 128>>>(M, N, K, alpha, A, B, beta, C);
             break;
         }
         case 37: {
-            constexpr int T = 256, BM = 128, BN = 64, BK = 8, TM = 4, TN = 8;
+            constexpr int BM = 64, BN = 128, BK = 16, WM = 32, WN = 64, LaneSizeN = 4, TM = 4, TN = 8;
             dim3 grid((M + BM - 1) / BM, (N + BN - 1) / BN);
-            gemm_tunable<T, BM, BN, BK, TM, TN><<<grid, T>>>(M, N, K, alpha, A, B, beta, C);
+            gemm_warp_tunable<BM, BN, BK, WM, WN, LaneSizeN, TM, TN><<<grid, 128>>>(M, N, K, alpha, A, B, beta, C);
             break;
         }
         case 38: {
-            constexpr int T = 256, BM = 128, BN = 64, BK = 8, TM = 8, TN = 4;
+            constexpr int BM = 64, BN = 128, BK = 16, WM = 32, WN = 64, LaneSizeN = 8, TM = 4, TN = 4;
             dim3 grid((M + BM - 1) / BM, (N + BN - 1) / BN);
-            gemm_tunable<T, BM, BN, BK, TM, TN><<<grid, T>>>(M, N, K, alpha, A, B, beta, C);
+            gemm_warp_tunable<BM, BN, BK, WM, WN, LaneSizeN, TM, TN><<<grid, 128>>>(M, N, K, alpha, A, B, beta, C);
             break;
         }
         case 39: {
-            constexpr int T = 128, BM = 128, BN = 64, BK = 8, TM = 8, TN = 8;
+            constexpr int BM = 64, BN = 128, BK = 16, WM = 32, WN = 64, LaneSizeN = 8, TM = 4, TN = 8;
             dim3 grid((M + BM - 1) / BM, (N + BN - 1) / BN);
-            gemm_tunable<T, BM, BN, BK, TM, TN><<<grid, T>>>(M, N, K, alpha, A, B, beta, C);
+            gemm_warp_tunable<BM, BN, BK, WM, WN, LaneSizeN, TM, TN><<<grid, 128>>>(M, N, K, alpha, A, B, beta, C);
             break;
         }
         case 40: {
-            constexpr int T = 512, BM = 128, BN = 64, BK = 16, TM = 4, TN = 4;
+            constexpr int BM = 64, BN = 128, BK = 16, WM = 32, WN = 64, LaneSizeN = 8, TM = 8, TN = 4;
             dim3 grid((M + BM - 1) / BM, (N + BN - 1) / BN);
-            gemm_tunable<T, BM, BN, BK, TM, TN><<<grid, T>>>(M, N, K, alpha, A, B, beta, C);
+            gemm_warp_tunable<BM, BN, BK, WM, WN, LaneSizeN, TM, TN><<<grid, 128>>>(M, N, K, alpha, A, B, beta, C);
             break;
         }
         case 41: {
-            constexpr int T = 256, BM = 128, BN = 64, BK = 16, TM = 4, TN = 8;
+            constexpr int BM = 64, BN = 128, BK = 16, WM = 32, WN = 64, LaneSizeN = 8, TM = 8, TN = 8;
             dim3 grid((M + BM - 1) / BM, (N + BN - 1) / BN);
-            gemm_tunable<T, BM, BN, BK, TM, TN><<<grid, T>>>(M, N, K, alpha, A, B, beta, C);
+            gemm_warp_tunable<BM, BN, BK, WM, WN, LaneSizeN, TM, TN><<<grid, 128>>>(M, N, K, alpha, A, B, beta, C);
             break;
         }
         case 42: {
-            constexpr int T = 256, BM = 128, BN = 64, BK = 16, TM = 8, TN = 4;
+            constexpr int BM = 64, BN = 128, BK = 16, WM = 64, WN = 32, LaneSizeN = 4, TM = 4, TN = 4;
             dim3 grid((M + BM - 1) / BM, (N + BN - 1) / BN);
-            gemm_tunable<T, BM, BN, BK, TM, TN><<<grid, T>>>(M, N, K, alpha, A, B, beta, C);
+            gemm_warp_tunable<BM, BN, BK, WM, WN, LaneSizeN, TM, TN><<<grid, 128>>>(M, N, K, alpha, A, B, beta, C);
             break;
         }
         case 43: {
-            constexpr int T = 128, BM = 128, BN = 64, BK = 16, TM = 8, TN = 8;
+            constexpr int BM = 64, BN = 128, BK = 16, WM = 64, WN = 32, LaneSizeN = 4, TM = 4, TN = 8;
             dim3 grid((M + BM - 1) / BM, (N + BN - 1) / BN);
-            gemm_tunable<T, BM, BN, BK, TM, TN><<<grid, T>>>(M, N, K, alpha, A, B, beta, C);
+            gemm_warp_tunable<BM, BN, BK, WM, WN, LaneSizeN, TM, TN><<<grid, 128>>>(M, N, K, alpha, A, B, beta, C);
             break;
         }
         case 44: {
-            constexpr int T = 512, BM = 128, BN = 64, BK = 32, TM = 4, TN = 4;
+            constexpr int BM = 64, BN = 128, BK = 16, WM = 64, WN = 32, LaneSizeN = 4, TM = 8, TN = 4;
             dim3 grid((M + BM - 1) / BM, (N + BN - 1) / BN);
-            gemm_tunable<T, BM, BN, BK, TM, TN><<<grid, T>>>(M, N, K, alpha, A, B, beta, C);
+            gemm_warp_tunable<BM, BN, BK, WM, WN, LaneSizeN, TM, TN><<<grid, 128>>>(M, N, K, alpha, A, B, beta, C);
             break;
         }
         case 45: {
-            constexpr int T = 256, BM = 128, BN = 64, BK = 32, TM = 4, TN = 8;
+            constexpr int BM = 64, BN = 128, BK = 16, WM = 64, WN = 32, LaneSizeN = 4, TM = 8, TN = 8;
             dim3 grid((M + BM - 1) / BM, (N + BN - 1) / BN);
-            gemm_tunable<T, BM, BN, BK, TM, TN><<<grid, T>>>(M, N, K, alpha, A, B, beta, C);
+            gemm_warp_tunable<BM, BN, BK, WM, WN, LaneSizeN, TM, TN><<<grid, 128>>>(M, N, K, alpha, A, B, beta, C);
             break;
         }
         case 46: {
-            constexpr int T = 256, BM = 128, BN = 64, BK = 32, TM = 8, TN = 4;
+            constexpr int BM = 64, BN = 128, BK = 16, WM = 64, WN = 32, LaneSizeN = 8, TM = 4, TN = 4;
             dim3 grid((M + BM - 1) / BM, (N + BN - 1) / BN);
-            gemm_tunable<T, BM, BN, BK, TM, TN><<<grid, T>>>(M, N, K, alpha, A, B, beta, C);
+            gemm_warp_tunable<BM, BN, BK, WM, WN, LaneSizeN, TM, TN><<<grid, 128>>>(M, N, K, alpha, A, B, beta, C);
             break;
         }
         case 47: {
-            constexpr int T = 128, BM = 128, BN = 64, BK = 32, TM = 8, TN = 8;
+            constexpr int BM = 64, BN = 128, BK = 16, WM = 64, WN = 32, LaneSizeN = 8, TM = 8, TN = 4;
             dim3 grid((M + BM - 1) / BM, (N + BN - 1) / BN);
-            gemm_tunable<T, BM, BN, BK, TM, TN><<<grid, T>>>(M, N, K, alpha, A, B, beta, C);
+            gemm_warp_tunable<BM, BN, BK, WM, WN, LaneSizeN, TM, TN><<<grid, 128>>>(M, N, K, alpha, A, B, beta, C);
             break;
         }
         case 48: {
-            constexpr int T = 1024, BM = 128, BN = 128, BK = 8, TM = 4, TN = 4;
+            constexpr int BM = 64, BN = 128, BK = 32, WM = 32, WN = 32, LaneSizeN = 4, TM = 4, TN = 4;
             dim3 grid((M + BM - 1) / BM, (N + BN - 1) / BN);
-            gemm_tunable<T, BM, BN, BK, TM, TN><<<grid, T>>>(M, N, K, alpha, A, B, beta, C);
+            gemm_warp_tunable<BM, BN, BK, WM, WN, LaneSizeN, TM, TN><<<grid, 256>>>(M, N, K, alpha, A, B, beta, C);
             break;
         }
         case 49: {
-            constexpr int T = 512, BM = 128, BN = 128, BK = 8, TM = 4, TN = 8;
+            constexpr int BM = 64, BN = 128, BK = 32, WM = 32, WN = 32, LaneSizeN = 4, TM = 4, TN = 8;
             dim3 grid((M + BM - 1) / BM, (N + BN - 1) / BN);
-            gemm_tunable<T, BM, BN, BK, TM, TN><<<grid, T>>>(M, N, K, alpha, A, B, beta, C);
+            gemm_warp_tunable<BM, BN, BK, WM, WN, LaneSizeN, TM, TN><<<grid, 256>>>(M, N, K, alpha, A, B, beta, C);
             break;
         }
         case 50: {
-            constexpr int T = 512, BM = 128, BN = 128, BK = 8, TM = 8, TN = 4;
+            constexpr int BM = 64, BN = 128, BK = 32, WM = 32, WN = 32, LaneSizeN = 8, TM = 4, TN = 4;
             dim3 grid((M + BM - 1) / BM, (N + BN - 1) / BN);
-            gemm_tunable<T, BM, BN, BK, TM, TN><<<grid, T>>>(M, N, K, alpha, A, B, beta, C);
+            gemm_warp_tunable<BM, BN, BK, WM, WN, LaneSizeN, TM, TN><<<grid, 256>>>(M, N, K, alpha, A, B, beta, C);
             break;
         }
         case 51: {
-            constexpr int T = 256, BM = 128, BN = 128, BK = 8, TM = 8, TN = 8;
+            constexpr int BM = 64, BN = 128, BK = 32, WM = 32, WN = 32, LaneSizeN = 8, TM = 8, TN = 4;
             dim3 grid((M + BM - 1) / BM, (N + BN - 1) / BN);
-            gemm_tunable<T, BM, BN, BK, TM, TN><<<grid, T>>>(M, N, K, alpha, A, B, beta, C);
+            gemm_warp_tunable<BM, BN, BK, WM, WN, LaneSizeN, TM, TN><<<grid, 256>>>(M, N, K, alpha, A, B, beta, C);
             break;
         }
         case 52: {
-            constexpr int T = 1024, BM = 128, BN = 128, BK = 16, TM = 4, TN = 4;
+            constexpr int BM = 64, BN = 128, BK = 32, WM = 32, WN = 64, LaneSizeN = 4, TM = 4, TN = 4;
             dim3 grid((M + BM - 1) / BM, (N + BN - 1) / BN);
-            gemm_tunable<T, BM, BN, BK, TM, TN><<<grid, T>>>(M, N, K, alpha, A, B, beta, C);
+            gemm_warp_tunable<BM, BN, BK, WM, WN, LaneSizeN, TM, TN><<<grid, 128>>>(M, N, K, alpha, A, B, beta, C);
             break;
         }
         case 53: {
-            constexpr int T = 512, BM = 128, BN = 128, BK = 16, TM = 4, TN = 8;
+            constexpr int BM = 64, BN = 128, BK = 32, WM = 32, WN = 64, LaneSizeN = 4, TM = 4, TN = 8;
             dim3 grid((M + BM - 1) / BM, (N + BN - 1) / BN);
-            gemm_tunable<T, BM, BN, BK, TM, TN><<<grid, T>>>(M, N, K, alpha, A, B, beta, C);
+            gemm_warp_tunable<BM, BN, BK, WM, WN, LaneSizeN, TM, TN><<<grid, 128>>>(M, N, K, alpha, A, B, beta, C);
             break;
         }
         case 54: {
-            constexpr int T = 512, BM = 128, BN = 128, BK = 16, TM = 8, TN = 4;
+            constexpr int BM = 64, BN = 128, BK = 32, WM = 32, WN = 64, LaneSizeN = 8, TM = 4, TN = 4;
             dim3 grid((M + BM - 1) / BM, (N + BN - 1) / BN);
-            gemm_tunable<T, BM, BN, BK, TM, TN><<<grid, T>>>(M, N, K, alpha, A, B, beta, C);
+            gemm_warp_tunable<BM, BN, BK, WM, WN, LaneSizeN, TM, TN><<<grid, 128>>>(M, N, K, alpha, A, B, beta, C);
             break;
         }
         case 55: {
-            constexpr int T = 256, BM = 128, BN = 128, BK = 16, TM = 8, TN = 8;
+            constexpr int BM = 64, BN = 128, BK = 32, WM = 32, WN = 64, LaneSizeN = 8, TM = 4, TN = 8;
             dim3 grid((M + BM - 1) / BM, (N + BN - 1) / BN);
-            gemm_tunable<T, BM, BN, BK, TM, TN><<<grid, T>>>(M, N, K, alpha, A, B, beta, C);
+            gemm_warp_tunable<BM, BN, BK, WM, WN, LaneSizeN, TM, TN><<<grid, 128>>>(M, N, K, alpha, A, B, beta, C);
             break;
         }
         case 56: {
-            constexpr int T = 1024, BM = 128, BN = 128, BK = 32, TM = 4, TN = 4;
+            constexpr int BM = 64, BN = 128, BK = 32, WM = 32, WN = 64, LaneSizeN = 8, TM = 8, TN = 4;
             dim3 grid((M + BM - 1) / BM, (N + BN - 1) / BN);
-            gemm_tunable<T, BM, BN, BK, TM, TN><<<grid, T>>>(M, N, K, alpha, A, B, beta, C);
+            gemm_warp_tunable<BM, BN, BK, WM, WN, LaneSizeN, TM, TN><<<grid, 128>>>(M, N, K, alpha, A, B, beta, C);
             break;
         }
         case 57: {
-            constexpr int T = 512, BM = 128, BN = 128, BK = 32, TM = 4, TN = 8;
+            constexpr int BM = 64, BN = 128, BK = 32, WM = 32, WN = 64, LaneSizeN = 8, TM = 8, TN = 8;
             dim3 grid((M + BM - 1) / BM, (N + BN - 1) / BN);
-            gemm_tunable<T, BM, BN, BK, TM, TN><<<grid, T>>>(M, N, K, alpha, A, B, beta, C);
+            gemm_warp_tunable<BM, BN, BK, WM, WN, LaneSizeN, TM, TN><<<grid, 128>>>(M, N, K, alpha, A, B, beta, C);
             break;
         }
         case 58: {
-            constexpr int T = 512, BM = 128, BN = 128, BK = 32, TM = 8, TN = 4;
+            constexpr int BM = 64, BN = 128, BK = 32, WM = 64, WN = 32, LaneSizeN = 4, TM = 4, TN = 4;
             dim3 grid((M + BM - 1) / BM, (N + BN - 1) / BN);
-            gemm_tunable<T, BM, BN, BK, TM, TN><<<grid, T>>>(M, N, K, alpha, A, B, beta, C);
+            gemm_warp_tunable<BM, BN, BK, WM, WN, LaneSizeN, TM, TN><<<grid, 128>>>(M, N, K, alpha, A, B, beta, C);
             break;
         }
         case 59: {
-            constexpr int T = 256, BM = 128, BN = 128, BK = 32, TM = 8, TN = 8;
+            constexpr int BM = 64, BN = 128, BK = 32, WM = 64, WN = 32, LaneSizeN = 4, TM = 4, TN = 8;
             dim3 grid((M + BM - 1) / BM, (N + BN - 1) / BN);
-            gemm_tunable<T, BM, BN, BK, TM, TN><<<grid, T>>>(M, N, K, alpha, A, B, beta, C);
+            gemm_warp_tunable<BM, BN, BK, WM, WN, LaneSizeN, TM, TN><<<grid, 128>>>(M, N, K, alpha, A, B, beta, C);
             break;
         }
         case 60: {
-            constexpr int T = 1024, BM = 128, BN = 256, BK = 8, TM = 4, TN = 8;
+            constexpr int BM = 64, BN = 128, BK = 32, WM = 64, WN = 32, LaneSizeN = 4, TM = 8, TN = 4;
             dim3 grid((M + BM - 1) / BM, (N + BN - 1) / BN);
-            gemm_tunable<T, BM, BN, BK, TM, TN><<<grid, T>>>(M, N, K, alpha, A, B, beta, C);
+            gemm_warp_tunable<BM, BN, BK, WM, WN, LaneSizeN, TM, TN><<<grid, 128>>>(M, N, K, alpha, A, B, beta, C);
             break;
         }
         case 61: {
-            constexpr int T = 1024, BM = 128, BN = 256, BK = 8, TM = 8, TN = 4;
+            constexpr int BM = 64, BN = 128, BK = 32, WM = 64, WN = 32, LaneSizeN = 4, TM = 8, TN = 8;
             dim3 grid((M + BM - 1) / BM, (N + BN - 1) / BN);
-            gemm_tunable<T, BM, BN, BK, TM, TN><<<grid, T>>>(M, N, K, alpha, A, B, beta, C);
+            gemm_warp_tunable<BM, BN, BK, WM, WN, LaneSizeN, TM, TN><<<grid, 128>>>(M, N, K, alpha, A, B, beta, C);
             break;
         }
         case 62: {
-            constexpr int T = 512, BM = 128, BN = 256, BK = 8, TM = 8, TN = 8;
+            constexpr int BM = 64, BN = 128, BK = 32, WM = 64, WN = 32, LaneSizeN = 8, TM = 4, TN = 4;
             dim3 grid((M + BM - 1) / BM, (N + BN - 1) / BN);
-            gemm_tunable<T, BM, BN, BK, TM, TN><<<grid, T>>>(M, N, K, alpha, A, B, beta, C);
+            gemm_warp_tunable<BM, BN, BK, WM, WN, LaneSizeN, TM, TN><<<grid, 128>>>(M, N, K, alpha, A, B, beta, C);
             break;
         }
         case 63: {
-            constexpr int T = 1024, BM = 128, BN = 256, BK = 16, TM = 4, TN = 8;
+            constexpr int BM = 64, BN = 128, BK = 32, WM = 64, WN = 32, LaneSizeN = 8, TM = 8, TN = 4;
             dim3 grid((M + BM - 1) / BM, (N + BN - 1) / BN);
-            gemm_tunable<T, BM, BN, BK, TM, TN><<<grid, T>>>(M, N, K, alpha, A, B, beta, C);
+            gemm_warp_tunable<BM, BN, BK, WM, WN, LaneSizeN, TM, TN><<<grid, 128>>>(M, N, K, alpha, A, B, beta, C);
             break;
         }
         case 64: {
-            constexpr int T = 1024, BM = 128, BN = 256, BK = 16, TM = 8, TN = 4;
+            constexpr int BM = 128, BN = 64, BK = 16, WM = 32, WN = 32, LaneSizeN = 4, TM = 4, TN = 4;
             dim3 grid((M + BM - 1) / BM, (N + BN - 1) / BN);
-            gemm_tunable<T, BM, BN, BK, TM, TN><<<grid, T>>>(M, N, K, alpha, A, B, beta, C);
+            gemm_warp_tunable<BM, BN, BK, WM, WN, LaneSizeN, TM, TN><<<grid, 256>>>(M, N, K, alpha, A, B, beta, C);
             break;
         }
         case 65: {
-            constexpr int T = 512, BM = 128, BN = 256, BK = 16, TM = 8, TN = 8;
+            constexpr int BM = 128, BN = 64, BK = 16, WM = 32, WN = 32, LaneSizeN = 4, TM = 4, TN = 8;
             dim3 grid((M + BM - 1) / BM, (N + BN - 1) / BN);
-            gemm_tunable<T, BM, BN, BK, TM, TN><<<grid, T>>>(M, N, K, alpha, A, B, beta, C);
+            gemm_warp_tunable<BM, BN, BK, WM, WN, LaneSizeN, TM, TN><<<grid, 256>>>(M, N, K, alpha, A, B, beta, C);
             break;
         }
         case 66: {
-            constexpr int T = 1024, BM = 128, BN = 256, BK = 32, TM = 4, TN = 8;
+            constexpr int BM = 128, BN = 64, BK = 16, WM = 32, WN = 32, LaneSizeN = 8, TM = 4, TN = 4;
             dim3 grid((M + BM - 1) / BM, (N + BN - 1) / BN);
-            gemm_tunable<T, BM, BN, BK, TM, TN><<<grid, T>>>(M, N, K, alpha, A, B, beta, C);
+            gemm_warp_tunable<BM, BN, BK, WM, WN, LaneSizeN, TM, TN><<<grid, 256>>>(M, N, K, alpha, A, B, beta, C);
             break;
         }
         case 67: {
-            constexpr int T = 1024, BM = 128, BN = 256, BK = 32, TM = 8, TN = 4;
+            constexpr int BM = 128, BN = 64, BK = 16, WM = 32, WN = 32, LaneSizeN = 8, TM = 8, TN = 4;
             dim3 grid((M + BM - 1) / BM, (N + BN - 1) / BN);
-            gemm_tunable<T, BM, BN, BK, TM, TN><<<grid, T>>>(M, N, K, alpha, A, B, beta, C);
+            gemm_warp_tunable<BM, BN, BK, WM, WN, LaneSizeN, TM, TN><<<grid, 256>>>(M, N, K, alpha, A, B, beta, C);
             break;
         }
         case 68: {
-            constexpr int T = 512, BM = 128, BN = 256, BK = 32, TM = 8, TN = 8;
+            constexpr int BM = 128, BN = 64, BK = 16, WM = 32, WN = 64, LaneSizeN = 4, TM = 4, TN = 4;
             dim3 grid((M + BM - 1) / BM, (N + BN - 1) / BN);
-            gemm_tunable<T, BM, BN, BK, TM, TN><<<grid, T>>>(M, N, K, alpha, A, B, beta, C);
+            gemm_warp_tunable<BM, BN, BK, WM, WN, LaneSizeN, TM, TN><<<grid, 128>>>(M, N, K, alpha, A, B, beta, C);
             break;
         }
         case 69: {
-            constexpr int T = 1024, BM = 256, BN = 64, BK = 8, TM = 4, TN = 4;
+            constexpr int BM = 128, BN = 64, BK = 16, WM = 32, WN = 64, LaneSizeN = 4, TM = 4, TN = 8;
             dim3 grid((M + BM - 1) / BM, (N + BN - 1) / BN);
-            gemm_tunable<T, BM, BN, BK, TM, TN><<<grid, T>>>(M, N, K, alpha, A, B, beta, C);
+            gemm_warp_tunable<BM, BN, BK, WM, WN, LaneSizeN, TM, TN><<<grid, 128>>>(M, N, K, alpha, A, B, beta, C);
             break;
         }
         case 70: {
-            constexpr int T = 512, BM = 256, BN = 64, BK = 8, TM = 4, TN = 8;
+            constexpr int BM = 128, BN = 64, BK = 16, WM = 32, WN = 64, LaneSizeN = 8, TM = 4, TN = 4;
             dim3 grid((M + BM - 1) / BM, (N + BN - 1) / BN);
-            gemm_tunable<T, BM, BN, BK, TM, TN><<<grid, T>>>(M, N, K, alpha, A, B, beta, C);
+            gemm_warp_tunable<BM, BN, BK, WM, WN, LaneSizeN, TM, TN><<<grid, 128>>>(M, N, K, alpha, A, B, beta, C);
             break;
         }
         case 71: {
-            constexpr int T = 512, BM = 256, BN = 64, BK = 8, TM = 8, TN = 4;
+            constexpr int BM = 128, BN = 64, BK = 16, WM = 32, WN = 64, LaneSizeN = 8, TM = 4, TN = 8;
             dim3 grid((M + BM - 1) / BM, (N + BN - 1) / BN);
-            gemm_tunable<T, BM, BN, BK, TM, TN><<<grid, T>>>(M, N, K, alpha, A, B, beta, C);
+            gemm_warp_tunable<BM, BN, BK, WM, WN, LaneSizeN, TM, TN><<<grid, 128>>>(M, N, K, alpha, A, B, beta, C);
             break;
         }
         case 72: {
-            constexpr int T = 256, BM = 256, BN = 64, BK = 8, TM = 8, TN = 8;
+            constexpr int BM = 128, BN = 64, BK = 16, WM = 32, WN = 64, LaneSizeN = 8, TM = 8, TN = 4;
             dim3 grid((M + BM - 1) / BM, (N + BN - 1) / BN);
-            gemm_tunable<T, BM, BN, BK, TM, TN><<<grid, T>>>(M, N, K, alpha, A, B, beta, C);
+            gemm_warp_tunable<BM, BN, BK, WM, WN, LaneSizeN, TM, TN><<<grid, 128>>>(M, N, K, alpha, A, B, beta, C);
             break;
         }
         case 73: {
-            constexpr int T = 1024, BM = 256, BN = 64, BK = 16, TM = 4, TN = 4;
+            constexpr int BM = 128, BN = 64, BK = 16, WM = 32, WN = 64, LaneSizeN = 8, TM = 8, TN = 8;
             dim3 grid((M + BM - 1) / BM, (N + BN - 1) / BN);
-            gemm_tunable<T, BM, BN, BK, TM, TN><<<grid, T>>>(M, N, K, alpha, A, B, beta, C);
+            gemm_warp_tunable<BM, BN, BK, WM, WN, LaneSizeN, TM, TN><<<grid, 128>>>(M, N, K, alpha, A, B, beta, C);
             break;
         }
         case 74: {
-            constexpr int T = 512, BM = 256, BN = 64, BK = 16, TM = 4, TN = 8;
+            constexpr int BM = 128, BN = 64, BK = 16, WM = 64, WN = 32, LaneSizeN = 4, TM = 4, TN = 4;
             dim3 grid((M + BM - 1) / BM, (N + BN - 1) / BN);
-            gemm_tunable<T, BM, BN, BK, TM, TN><<<grid, T>>>(M, N, K, alpha, A, B, beta, C);
+            gemm_warp_tunable<BM, BN, BK, WM, WN, LaneSizeN, TM, TN><<<grid, 128>>>(M, N, K, alpha, A, B, beta, C);
             break;
         }
         case 75: {
-            constexpr int T = 512, BM = 256, BN = 64, BK = 16, TM = 8, TN = 4;
+            constexpr int BM = 128, BN = 64, BK = 16, WM = 64, WN = 32, LaneSizeN = 4, TM = 4, TN = 8;
             dim3 grid((M + BM - 1) / BM, (N + BN - 1) / BN);
-            gemm_tunable<T, BM, BN, BK, TM, TN><<<grid, T>>>(M, N, K, alpha, A, B, beta, C);
+            gemm_warp_tunable<BM, BN, BK, WM, WN, LaneSizeN, TM, TN><<<grid, 128>>>(M, N, K, alpha, A, B, beta, C);
             break;
         }
         case 76: {
-            constexpr int T = 256, BM = 256, BN = 64, BK = 16, TM = 8, TN = 8;
+            constexpr int BM = 128, BN = 64, BK = 16, WM = 64, WN = 32, LaneSizeN = 4, TM = 8, TN = 4;
             dim3 grid((M + BM - 1) / BM, (N + BN - 1) / BN);
-            gemm_tunable<T, BM, BN, BK, TM, TN><<<grid, T>>>(M, N, K, alpha, A, B, beta, C);
+            gemm_warp_tunable<BM, BN, BK, WM, WN, LaneSizeN, TM, TN><<<grid, 128>>>(M, N, K, alpha, A, B, beta, C);
             break;
         }
         case 77: {
-            constexpr int T = 1024, BM = 256, BN = 64, BK = 32, TM = 4, TN = 4;
+            constexpr int BM = 128, BN = 64, BK = 16, WM = 64, WN = 32, LaneSizeN = 4, TM = 8, TN = 8;
             dim3 grid((M + BM - 1) / BM, (N + BN - 1) / BN);
-            gemm_tunable<T, BM, BN, BK, TM, TN><<<grid, T>>>(M, N, K, alpha, A, B, beta, C);
+            gemm_warp_tunable<BM, BN, BK, WM, WN, LaneSizeN, TM, TN><<<grid, 128>>>(M, N, K, alpha, A, B, beta, C);
             break;
         }
         case 78: {
-            constexpr int T = 512, BM = 256, BN = 64, BK = 32, TM = 4, TN = 8;
+            constexpr int BM = 128, BN = 64, BK = 16, WM = 64, WN = 32, LaneSizeN = 8, TM = 4, TN = 4;
             dim3 grid((M + BM - 1) / BM, (N + BN - 1) / BN);
-            gemm_tunable<T, BM, BN, BK, TM, TN><<<grid, T>>>(M, N, K, alpha, A, B, beta, C);
+            gemm_warp_tunable<BM, BN, BK, WM, WN, LaneSizeN, TM, TN><<<grid, 128>>>(M, N, K, alpha, A, B, beta, C);
             break;
         }
         case 79: {
-            constexpr int T = 512, BM = 256, BN = 64, BK = 32, TM = 8, TN = 4;
+            constexpr int BM = 128, BN = 64, BK = 16, WM = 64, WN = 32, LaneSizeN = 8, TM = 8, TN = 4;
             dim3 grid((M + BM - 1) / BM, (N + BN - 1) / BN);
-            gemm_tunable<T, BM, BN, BK, TM, TN><<<grid, T>>>(M, N, K, alpha, A, B, beta, C);
+            gemm_warp_tunable<BM, BN, BK, WM, WN, LaneSizeN, TM, TN><<<grid, 128>>>(M, N, K, alpha, A, B, beta, C);
             break;
         }
         case 80: {
-            constexpr int T = 256, BM = 256, BN = 64, BK = 32, TM = 8, TN = 8;
+            constexpr int BM = 128, BN = 64, BK = 32, WM = 32, WN = 32, LaneSizeN = 4, TM = 4, TN = 4;
             dim3 grid((M + BM - 1) / BM, (N + BN - 1) / BN);
-            gemm_tunable<T, BM, BN, BK, TM, TN><<<grid, T>>>(M, N, K, alpha, A, B, beta, C);
+            gemm_warp_tunable<BM, BN, BK, WM, WN, LaneSizeN, TM, TN><<<grid, 256>>>(M, N, K, alpha, A, B, beta, C);
             break;
         }
         case 81: {
-            constexpr int T = 1024, BM = 256, BN = 128, BK = 8, TM = 4, TN = 8;
+            constexpr int BM = 128, BN = 64, BK = 32, WM = 32, WN = 32, LaneSizeN = 4, TM = 4, TN = 8;
             dim3 grid((M + BM - 1) / BM, (N + BN - 1) / BN);
-            gemm_tunable<T, BM, BN, BK, TM, TN><<<grid, T>>>(M, N, K, alpha, A, B, beta, C);
+            gemm_warp_tunable<BM, BN, BK, WM, WN, LaneSizeN, TM, TN><<<grid, 256>>>(M, N, K, alpha, A, B, beta, C);
             break;
         }
         case 82: {
-            constexpr int T = 1024, BM = 256, BN = 128, BK = 8, TM = 8, TN = 4;
+            constexpr int BM = 128, BN = 64, BK = 32, WM = 32, WN = 32, LaneSizeN = 8, TM = 4, TN = 4;
             dim3 grid((M + BM - 1) / BM, (N + BN - 1) / BN);
-            gemm_tunable<T, BM, BN, BK, TM, TN><<<grid, T>>>(M, N, K, alpha, A, B, beta, C);
+            gemm_warp_tunable<BM, BN, BK, WM, WN, LaneSizeN, TM, TN><<<grid, 256>>>(M, N, K, alpha, A, B, beta, C);
             break;
         }
         case 83: {
-            constexpr int T = 512, BM = 256, BN = 128, BK = 8, TM = 8, TN = 8;
+            constexpr int BM = 128, BN = 64, BK = 32, WM = 32, WN = 32, LaneSizeN = 8, TM = 8, TN = 4;
             dim3 grid((M + BM - 1) / BM, (N + BN - 1) / BN);
-            gemm_tunable<T, BM, BN, BK, TM, TN><<<grid, T>>>(M, N, K, alpha, A, B, beta, C);
+            gemm_warp_tunable<BM, BN, BK, WM, WN, LaneSizeN, TM, TN><<<grid, 256>>>(M, N, K, alpha, A, B, beta, C);
             break;
         }
         case 84: {
-            constexpr int T = 1024, BM = 256, BN = 128, BK = 16, TM = 4, TN = 8;
+            constexpr int BM = 128, BN = 64, BK = 32, WM = 32, WN = 64, LaneSizeN = 4, TM = 4, TN = 4;
             dim3 grid((M + BM - 1) / BM, (N + BN - 1) / BN);
-            gemm_tunable<T, BM, BN, BK, TM, TN><<<grid, T>>>(M, N, K, alpha, A, B, beta, C);
+            gemm_warp_tunable<BM, BN, BK, WM, WN, LaneSizeN, TM, TN><<<grid, 128>>>(M, N, K, alpha, A, B, beta, C);
             break;
         }
         case 85: {
-            constexpr int T = 1024, BM = 256, BN = 128, BK = 16, TM = 8, TN = 4;
+            constexpr int BM = 128, BN = 64, BK = 32, WM = 32, WN = 64, LaneSizeN = 4, TM = 4, TN = 8;
             dim3 grid((M + BM - 1) / BM, (N + BN - 1) / BN);
-            gemm_tunable<T, BM, BN, BK, TM, TN><<<grid, T>>>(M, N, K, alpha, A, B, beta, C);
+            gemm_warp_tunable<BM, BN, BK, WM, WN, LaneSizeN, TM, TN><<<grid, 128>>>(M, N, K, alpha, A, B, beta, C);
             break;
         }
         case 86: {
-            constexpr int T = 512, BM = 256, BN = 128, BK = 16, TM = 8, TN = 8;
+            constexpr int BM = 128, BN = 64, BK = 32, WM = 32, WN = 64, LaneSizeN = 8, TM = 4, TN = 4;
             dim3 grid((M + BM - 1) / BM, (N + BN - 1) / BN);
-            gemm_tunable<T, BM, BN, BK, TM, TN><<<grid, T>>>(M, N, K, alpha, A, B, beta, C);
+            gemm_warp_tunable<BM, BN, BK, WM, WN, LaneSizeN, TM, TN><<<grid, 128>>>(M, N, K, alpha, A, B, beta, C);
             break;
         }
         case 87: {
-            constexpr int T = 1024, BM = 256, BN = 128, BK = 32, TM = 4, TN = 8;
+            constexpr int BM = 128, BN = 64, BK = 32, WM = 32, WN = 64, LaneSizeN = 8, TM = 4, TN = 8;
             dim3 grid((M + BM - 1) / BM, (N + BN - 1) / BN);
-            gemm_tunable<T, BM, BN, BK, TM, TN><<<grid, T>>>(M, N, K, alpha, A, B, beta, C);
+            gemm_warp_tunable<BM, BN, BK, WM, WN, LaneSizeN, TM, TN><<<grid, 128>>>(M, N, K, alpha, A, B, beta, C);
             break;
         }
         case 88: {
-            constexpr int T = 1024, BM = 256, BN = 128, BK = 32, TM = 8, TN = 4;
+            constexpr int BM = 128, BN = 64, BK = 32, WM = 32, WN = 64, LaneSizeN = 8, TM = 8, TN = 4;
             dim3 grid((M + BM - 1) / BM, (N + BN - 1) / BN);
-            gemm_tunable<T, BM, BN, BK, TM, TN><<<grid, T>>>(M, N, K, alpha, A, B, beta, C);
+            gemm_warp_tunable<BM, BN, BK, WM, WN, LaneSizeN, TM, TN><<<grid, 128>>>(M, N, K, alpha, A, B, beta, C);
             break;
         }
         case 89: {
-            constexpr int T = 512, BM = 256, BN = 128, BK = 32, TM = 8, TN = 8;
+            constexpr int BM = 128, BN = 64, BK = 32, WM = 32, WN = 64, LaneSizeN = 8, TM = 8, TN = 8;
             dim3 grid((M + BM - 1) / BM, (N + BN - 1) / BN);
-            gemm_tunable<T, BM, BN, BK, TM, TN><<<grid, T>>>(M, N, K, alpha, A, B, beta, C);
+            gemm_warp_tunable<BM, BN, BK, WM, WN, LaneSizeN, TM, TN><<<grid, 128>>>(M, N, K, alpha, A, B, beta, C);
             break;
         }
         case 90: {
-            constexpr int T = 1024, BM = 256, BN = 256, BK = 8, TM = 8, TN = 8;
+            constexpr int BM = 128, BN = 64, BK = 32, WM = 64, WN = 32, LaneSizeN = 4, TM = 4, TN = 4;
             dim3 grid((M + BM - 1) / BM, (N + BN - 1) / BN);
-            gemm_tunable<T, BM, BN, BK, TM, TN><<<grid, T>>>(M, N, K, alpha, A, B, beta, C);
+            gemm_warp_tunable<BM, BN, BK, WM, WN, LaneSizeN, TM, TN><<<grid, 128>>>(M, N, K, alpha, A, B, beta, C);
             break;
         }
         case 91: {
-            constexpr int T = 1024, BM = 256, BN = 256, BK = 16, TM = 8, TN = 8;
+            constexpr int BM = 128, BN = 64, BK = 32, WM = 64, WN = 32, LaneSizeN = 4, TM = 4, TN = 8;
             dim3 grid((M + BM - 1) / BM, (N + BN - 1) / BN);
-            gemm_tunable<T, BM, BN, BK, TM, TN><<<grid, T>>>(M, N, K, alpha, A, B, beta, C);
+            gemm_warp_tunable<BM, BN, BK, WM, WN, LaneSizeN, TM, TN><<<grid, 128>>>(M, N, K, alpha, A, B, beta, C);
+            break;
+        }
+        case 92: {
+            constexpr int BM = 128, BN = 64, BK = 32, WM = 64, WN = 32, LaneSizeN = 4, TM = 8, TN = 4;
+            dim3 grid((M + BM - 1) / BM, (N + BN - 1) / BN);
+            gemm_warp_tunable<BM, BN, BK, WM, WN, LaneSizeN, TM, TN><<<grid, 128>>>(M, N, K, alpha, A, B, beta, C);
+            break;
+        }
+        case 93: {
+            constexpr int BM = 128, BN = 64, BK = 32, WM = 64, WN = 32, LaneSizeN = 4, TM = 8, TN = 8;
+            dim3 grid((M + BM - 1) / BM, (N + BN - 1) / BN);
+            gemm_warp_tunable<BM, BN, BK, WM, WN, LaneSizeN, TM, TN><<<grid, 128>>>(M, N, K, alpha, A, B, beta, C);
+            break;
+        }
+        case 94: {
+            constexpr int BM = 128, BN = 64, BK = 32, WM = 64, WN = 32, LaneSizeN = 8, TM = 4, TN = 4;
+            dim3 grid((M + BM - 1) / BM, (N + BN - 1) / BN);
+            gemm_warp_tunable<BM, BN, BK, WM, WN, LaneSizeN, TM, TN><<<grid, 128>>>(M, N, K, alpha, A, B, beta, C);
+            break;
+        }
+        case 95: {
+            constexpr int BM = 128, BN = 64, BK = 32, WM = 64, WN = 32, LaneSizeN = 8, TM = 8, TN = 4;
+            dim3 grid((M + BM - 1) / BM, (N + BN - 1) / BN);
+            gemm_warp_tunable<BM, BN, BK, WM, WN, LaneSizeN, TM, TN><<<grid, 128>>>(M, N, K, alpha, A, B, beta, C);
+            break;
+        }
+        case 96: {
+            constexpr int BM = 128, BN = 128, BK = 16, WM = 32, WN = 32, LaneSizeN = 4, TM = 4, TN = 4;
+            dim3 grid((M + BM - 1) / BM, (N + BN - 1) / BN);
+            gemm_warp_tunable<BM, BN, BK, WM, WN, LaneSizeN, TM, TN><<<grid, 512>>>(M, N, K, alpha, A, B, beta, C);
+            break;
+        }
+        case 97: {
+            constexpr int BM = 128, BN = 128, BK = 16, WM = 32, WN = 32, LaneSizeN = 4, TM = 4, TN = 8;
+            dim3 grid((M + BM - 1) / BM, (N + BN - 1) / BN);
+            gemm_warp_tunable<BM, BN, BK, WM, WN, LaneSizeN, TM, TN><<<grid, 512>>>(M, N, K, alpha, A, B, beta, C);
+            break;
+        }
+        case 98: {
+            constexpr int BM = 128, BN = 128, BK = 16, WM = 32, WN = 32, LaneSizeN = 8, TM = 4, TN = 4;
+            dim3 grid((M + BM - 1) / BM, (N + BN - 1) / BN);
+            gemm_warp_tunable<BM, BN, BK, WM, WN, LaneSizeN, TM, TN><<<grid, 512>>>(M, N, K, alpha, A, B, beta, C);
+            break;
+        }
+        case 99: {
+            constexpr int BM = 128, BN = 128, BK = 16, WM = 32, WN = 32, LaneSizeN = 8, TM = 8, TN = 4;
+            dim3 grid((M + BM - 1) / BM, (N + BN - 1) / BN);
+            gemm_warp_tunable<BM, BN, BK, WM, WN, LaneSizeN, TM, TN><<<grid, 512>>>(M, N, K, alpha, A, B, beta, C);
+            break;
+        }
+        case 100: {
+            constexpr int BM = 128, BN = 128, BK = 16, WM = 32, WN = 64, LaneSizeN = 4, TM = 4, TN = 4;
+            dim3 grid((M + BM - 1) / BM, (N + BN - 1) / BN);
+            gemm_warp_tunable<BM, BN, BK, WM, WN, LaneSizeN, TM, TN><<<grid, 256>>>(M, N, K, alpha, A, B, beta, C);
+            break;
+        }
+        case 101: {
+            constexpr int BM = 128, BN = 128, BK = 16, WM = 32, WN = 64, LaneSizeN = 4, TM = 4, TN = 8;
+            dim3 grid((M + BM - 1) / BM, (N + BN - 1) / BN);
+            gemm_warp_tunable<BM, BN, BK, WM, WN, LaneSizeN, TM, TN><<<grid, 256>>>(M, N, K, alpha, A, B, beta, C);
+            break;
+        }
+        case 102: {
+            constexpr int BM = 128, BN = 128, BK = 16, WM = 32, WN = 64, LaneSizeN = 8, TM = 4, TN = 4;
+            dim3 grid((M + BM - 1) / BM, (N + BN - 1) / BN);
+            gemm_warp_tunable<BM, BN, BK, WM, WN, LaneSizeN, TM, TN><<<grid, 256>>>(M, N, K, alpha, A, B, beta, C);
+            break;
+        }
+        case 103: {
+            constexpr int BM = 128, BN = 128, BK = 16, WM = 32, WN = 64, LaneSizeN = 8, TM = 4, TN = 8;
+            dim3 grid((M + BM - 1) / BM, (N + BN - 1) / BN);
+            gemm_warp_tunable<BM, BN, BK, WM, WN, LaneSizeN, TM, TN><<<grid, 256>>>(M, N, K, alpha, A, B, beta, C);
+            break;
+        }
+        case 104: {
+            constexpr int BM = 128, BN = 128, BK = 16, WM = 32, WN = 64, LaneSizeN = 8, TM = 8, TN = 4;
+            dim3 grid((M + BM - 1) / BM, (N + BN - 1) / BN);
+            gemm_warp_tunable<BM, BN, BK, WM, WN, LaneSizeN, TM, TN><<<grid, 256>>>(M, N, K, alpha, A, B, beta, C);
+            break;
+        }
+        case 105: {
+            constexpr int BM = 128, BN = 128, BK = 16, WM = 32, WN = 64, LaneSizeN = 8, TM = 8, TN = 8;
+            dim3 grid((M + BM - 1) / BM, (N + BN - 1) / BN);
+            gemm_warp_tunable<BM, BN, BK, WM, WN, LaneSizeN, TM, TN><<<grid, 256>>>(M, N, K, alpha, A, B, beta, C);
+            break;
+        }
+        case 106: {
+            constexpr int BM = 128, BN = 128, BK = 16, WM = 64, WN = 32, LaneSizeN = 4, TM = 4, TN = 4;
+            dim3 grid((M + BM - 1) / BM, (N + BN - 1) / BN);
+            gemm_warp_tunable<BM, BN, BK, WM, WN, LaneSizeN, TM, TN><<<grid, 256>>>(M, N, K, alpha, A, B, beta, C);
+            break;
+        }
+        case 107: {
+            constexpr int BM = 128, BN = 128, BK = 16, WM = 64, WN = 32, LaneSizeN = 4, TM = 4, TN = 8;
+            dim3 grid((M + BM - 1) / BM, (N + BN - 1) / BN);
+            gemm_warp_tunable<BM, BN, BK, WM, WN, LaneSizeN, TM, TN><<<grid, 256>>>(M, N, K, alpha, A, B, beta, C);
+            break;
+        }
+        case 108: {
+            constexpr int BM = 128, BN = 128, BK = 16, WM = 64, WN = 32, LaneSizeN = 4, TM = 8, TN = 4;
+            dim3 grid((M + BM - 1) / BM, (N + BN - 1) / BN);
+            gemm_warp_tunable<BM, BN, BK, WM, WN, LaneSizeN, TM, TN><<<grid, 256>>>(M, N, K, alpha, A, B, beta, C);
+            break;
+        }
+        case 109: {
+            constexpr int BM = 128, BN = 128, BK = 16, WM = 64, WN = 32, LaneSizeN = 4, TM = 8, TN = 8;
+            dim3 grid((M + BM - 1) / BM, (N + BN - 1) / BN);
+            gemm_warp_tunable<BM, BN, BK, WM, WN, LaneSizeN, TM, TN><<<grid, 256>>>(M, N, K, alpha, A, B, beta, C);
+            break;
+        }
+        case 110: {
+            constexpr int BM = 128, BN = 128, BK = 16, WM = 64, WN = 32, LaneSizeN = 8, TM = 4, TN = 4;
+            dim3 grid((M + BM - 1) / BM, (N + BN - 1) / BN);
+            gemm_warp_tunable<BM, BN, BK, WM, WN, LaneSizeN, TM, TN><<<grid, 256>>>(M, N, K, alpha, A, B, beta, C);
+            break;
+        }
+        case 111: {
+            constexpr int BM = 128, BN = 128, BK = 16, WM = 64, WN = 32, LaneSizeN = 8, TM = 8, TN = 4;
+            dim3 grid((M + BM - 1) / BM, (N + BN - 1) / BN);
+            gemm_warp_tunable<BM, BN, BK, WM, WN, LaneSizeN, TM, TN><<<grid, 256>>>(M, N, K, alpha, A, B, beta, C);
+            break;
+        }
+        case 112: {
+            constexpr int BM = 128, BN = 128, BK = 32, WM = 32, WN = 32, LaneSizeN = 4, TM = 4, TN = 4;
+            dim3 grid((M + BM - 1) / BM, (N + BN - 1) / BN);
+            gemm_warp_tunable<BM, BN, BK, WM, WN, LaneSizeN, TM, TN><<<grid, 512>>>(M, N, K, alpha, A, B, beta, C);
+            break;
+        }
+        case 113: {
+            constexpr int BM = 128, BN = 128, BK = 32, WM = 32, WN = 32, LaneSizeN = 4, TM = 4, TN = 8;
+            dim3 grid((M + BM - 1) / BM, (N + BN - 1) / BN);
+            gemm_warp_tunable<BM, BN, BK, WM, WN, LaneSizeN, TM, TN><<<grid, 512>>>(M, N, K, alpha, A, B, beta, C);
+            break;
+        }
+        case 114: {
+            constexpr int BM = 128, BN = 128, BK = 32, WM = 32, WN = 32, LaneSizeN = 8, TM = 4, TN = 4;
+            dim3 grid((M + BM - 1) / BM, (N + BN - 1) / BN);
+            gemm_warp_tunable<BM, BN, BK, WM, WN, LaneSizeN, TM, TN><<<grid, 512>>>(M, N, K, alpha, A, B, beta, C);
+            break;
+        }
+        case 115: {
+            constexpr int BM = 128, BN = 128, BK = 32, WM = 32, WN = 32, LaneSizeN = 8, TM = 8, TN = 4;
+            dim3 grid((M + BM - 1) / BM, (N + BN - 1) / BN);
+            gemm_warp_tunable<BM, BN, BK, WM, WN, LaneSizeN, TM, TN><<<grid, 512>>>(M, N, K, alpha, A, B, beta, C);
+            break;
+        }
+        case 116: {
+            constexpr int BM = 128, BN = 128, BK = 32, WM = 32, WN = 64, LaneSizeN = 4, TM = 4, TN = 4;
+            dim3 grid((M + BM - 1) / BM, (N + BN - 1) / BN);
+            gemm_warp_tunable<BM, BN, BK, WM, WN, LaneSizeN, TM, TN><<<grid, 256>>>(M, N, K, alpha, A, B, beta, C);
+            break;
+        }
+        case 117: {
+            constexpr int BM = 128, BN = 128, BK = 32, WM = 32, WN = 64, LaneSizeN = 4, TM = 4, TN = 8;
+            dim3 grid((M + BM - 1) / BM, (N + BN - 1) / BN);
+            gemm_warp_tunable<BM, BN, BK, WM, WN, LaneSizeN, TM, TN><<<grid, 256>>>(M, N, K, alpha, A, B, beta, C);
+            break;
+        }
+        case 118: {
+            constexpr int BM = 128, BN = 128, BK = 32, WM = 32, WN = 64, LaneSizeN = 8, TM = 4, TN = 4;
+            dim3 grid((M + BM - 1) / BM, (N + BN - 1) / BN);
+            gemm_warp_tunable<BM, BN, BK, WM, WN, LaneSizeN, TM, TN><<<grid, 256>>>(M, N, K, alpha, A, B, beta, C);
+            break;
+        }
+        case 119: {
+            constexpr int BM = 128, BN = 128, BK = 32, WM = 32, WN = 64, LaneSizeN = 8, TM = 4, TN = 8;
+            dim3 grid((M + BM - 1) / BM, (N + BN - 1) / BN);
+            gemm_warp_tunable<BM, BN, BK, WM, WN, LaneSizeN, TM, TN><<<grid, 256>>>(M, N, K, alpha, A, B, beta, C);
+            break;
+        }
+        case 120: {
+            constexpr int BM = 128, BN = 128, BK = 32, WM = 32, WN = 64, LaneSizeN = 8, TM = 8, TN = 4;
+            dim3 grid((M + BM - 1) / BM, (N + BN - 1) / BN);
+            gemm_warp_tunable<BM, BN, BK, WM, WN, LaneSizeN, TM, TN><<<grid, 256>>>(M, N, K, alpha, A, B, beta, C);
+            break;
+        }
+        case 121: {
+            constexpr int BM = 128, BN = 128, BK = 32, WM = 32, WN = 64, LaneSizeN = 8, TM = 8, TN = 8;
+            dim3 grid((M + BM - 1) / BM, (N + BN - 1) / BN);
+            gemm_warp_tunable<BM, BN, BK, WM, WN, LaneSizeN, TM, TN><<<grid, 256>>>(M, N, K, alpha, A, B, beta, C);
+            break;
+        }
+        case 122: {
+            constexpr int BM = 128, BN = 128, BK = 32, WM = 64, WN = 32, LaneSizeN = 4, TM = 4, TN = 4;
+            dim3 grid((M + BM - 1) / BM, (N + BN - 1) / BN);
+            gemm_warp_tunable<BM, BN, BK, WM, WN, LaneSizeN, TM, TN><<<grid, 256>>>(M, N, K, alpha, A, B, beta, C);
+            break;
+        }
+        case 123: {
+            constexpr int BM = 128, BN = 128, BK = 32, WM = 64, WN = 32, LaneSizeN = 4, TM = 4, TN = 8;
+            dim3 grid((M + BM - 1) / BM, (N + BN - 1) / BN);
+            gemm_warp_tunable<BM, BN, BK, WM, WN, LaneSizeN, TM, TN><<<grid, 256>>>(M, N, K, alpha, A, B, beta, C);
+            break;
+        }
+        case 124: {
+            constexpr int BM = 128, BN = 128, BK = 32, WM = 64, WN = 32, LaneSizeN = 4, TM = 8, TN = 4;
+            dim3 grid((M + BM - 1) / BM, (N + BN - 1) / BN);
+            gemm_warp_tunable<BM, BN, BK, WM, WN, LaneSizeN, TM, TN><<<grid, 256>>>(M, N, K, alpha, A, B, beta, C);
+            break;
+        }
+        case 125: {
+            constexpr int BM = 128, BN = 128, BK = 32, WM = 64, WN = 32, LaneSizeN = 4, TM = 8, TN = 8;
+            dim3 grid((M + BM - 1) / BM, (N + BN - 1) / BN);
+            gemm_warp_tunable<BM, BN, BK, WM, WN, LaneSizeN, TM, TN><<<grid, 256>>>(M, N, K, alpha, A, B, beta, C);
+            break;
+        }
+        case 126: {
+            constexpr int BM = 128, BN = 128, BK = 32, WM = 64, WN = 32, LaneSizeN = 8, TM = 4, TN = 4;
+            dim3 grid((M + BM - 1) / BM, (N + BN - 1) / BN);
+            gemm_warp_tunable<BM, BN, BK, WM, WN, LaneSizeN, TM, TN><<<grid, 256>>>(M, N, K, alpha, A, B, beta, C);
+            break;
+        }
+        case 127: {
+            constexpr int BM = 128, BN = 128, BK = 32, WM = 64, WN = 32, LaneSizeN = 8, TM = 8, TN = 4;
+            dim3 grid((M + BM - 1) / BM, (N + BN - 1) / BN);
+            gemm_warp_tunable<BM, BN, BK, WM, WN, LaneSizeN, TM, TN><<<grid, 256>>>(M, N, K, alpha, A, B, beta, C);
             break;
         }
         default: break;
@@ -716,9 +967,8 @@ int main(int argc, char **argv) {
         launch(cfg, M, N, K, alpha, dA, dB, beta, dC);
         cudaError_t err = cudaDeviceSynchronize();
         if (err != cudaSuccess) {
-            printf("CFG %d %d %d %d %d %d %d 0.000000 0.0 ERROR(%s)\n",
-                   cfg, CFG[cfg].threads, CFG[cfg].BM, CFG[cfg].BN,
-                   CFG[cfg].BK, CFG[cfg].TM, CFG[cfg].TN, cudaGetErrorString(err));
+            printf("CFG %d %d %d %d %d %d %d %d %d %d 0.000000 0.0 ERROR(%s)\n",
+                   cfg, CFG[cfg].threads, CFG[cfg].BM, CFG[cfg].BN, CFG[cfg].BK, CFG[cfg].WM, CFG[cfg].WN, CFG[cfg].LaneSizeN, CFG[cfg].TM, CFG[cfg].TN, cudaGetErrorString(err));
             fflush(stdout); continue;
         }
         cudaMemcpy(C, dC, szC * sizeof(float), cudaMemcpyDeviceToHost);
@@ -731,9 +981,8 @@ int main(int argc, char **argv) {
         float ms = 0.0f; cudaEventElapsedTime(&ms, beg, end); ms /= repeat;
         double gflops = 2.0 * (double)M * N * K / (ms * 1e-3) / 1e9;
 
-        printf("CFG %d %d %d %d %d %d %d %.6f %.1f %s\n",
-               cfg, CFG[cfg].threads, CFG[cfg].BM, CFG[cfg].BN, CFG[cfg].BK,
-               CFG[cfg].TM, CFG[cfg].TN, ms, gflops, ok ? "OK" : "BAD");
+        printf("CFG %d %d %d %d %d %d %d %d %d %d %.6f %.1f %s\n",
+               cfg, CFG[cfg].threads, CFG[cfg].BM, CFG[cfg].BN, CFG[cfg].BK, CFG[cfg].WM, CFG[cfg].WN, CFG[cfg].LaneSizeN, CFG[cfg].TM, CFG[cfg].TN, ms, gflops, ok ? "OK" : "BAD");
         fflush(stdout);
     }
 

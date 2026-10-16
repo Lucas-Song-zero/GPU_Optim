@@ -1,5 +1,6 @@
 # --- toolchain ----
 NVCC ?= /usr/local/cuda-13.3/bin/nvcc
+NCU ?= /usr/local/cuda-13.3/bin/ncu
 ARCH = sm_120
 CXXSTD = c++20
 
@@ -34,7 +35,10 @@ run: $(TARGET)
 	./$(TARGET) $(KERNEL)
                                                                   
 run-debug: $(DEBUG_TARGET)
-	./$(DEBUG_TARGET) $(KERNEL)                               
+	./$(DEBUG_TARGET) $(KERNEL)
+
+compile_ncu: 
+	$(NVCC) $(REALEASE) -lineinfo $(INCLUDES) -o gemm_ncu $(SRC) $(LIBS)
                                                                   
 sanitize: $(DEBUG_TARGET)
 	/usr/local/cuda-13.3/bin/compute-sanitizer --tool memcheck ./$(DEBUG_TARGET) $(KERNEL)                                     

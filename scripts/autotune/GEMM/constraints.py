@@ -90,10 +90,95 @@ def gen_configs(
             yield cfg
 
 
+# ---------------------------------------------------------------------------
+# Warp-tiling kernel (src/GEMM/9_autotune_more.cuh)
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class WarpConfig:
+    threads: int  # threads per block = (BM*BN / (WM*WN)) * 32
+    BM: int       # block-tile rows (M)
+    BN: int       # block-tile cols (N)
+    BK: int       # block-tile depth (K)
+    WM: int       # warp-tile rows (M)
+    WN: int       # warp-tile cols (N)
+    LaneSizeN: int  # lanes per row of the warp sub-tile (N direction)
+    TM: int       # per-thread sub-tile rows
+    TN: int       # per-thread sub-tile cols
+
+
+def valid_warp(cfg: WarpConfig, device: Device) -> bool:
+    """Return True iff *cfg* is legal for gemm_warp_tunable's indexing."""
+    if cfg.BM % cfg.WM != 0 or cfg.BN % cfg.WN != 0:
+        return False
+    # warps are laid out (BM/WM) x (BN/WN); need exact division.
+    if cfg.BM * cfg.BN % (cfg.WM * cfg.WN) != 0:
+        return False
+    warps = cfg.BM * cfg.BN // (cfg.WM * cfg.WN)
+    if cfg.threads != warps * device.warp_size:
+        return False
+    if not (device.warp_size <= cfg.threads <= device.max_threads_per_block):
+        return False
+    if cfg.threads % device.warp_size != 0:
+        return False
+
+    # LaneSizeN must divide the warp; warp sub-tile must divide the warp tile.
+    if device.warp_size % cfg.LaneSizeN != 0:
+        return False
+    sub_m = (device.warp_size // cfg.LaneSizeN) * cfg.TM
+    sub_n = cfg.LaneSizeN * cfg.TN
+    if cfg.WM % sub_m != 0 or cfg.WN % sub_n != 0:
+        return False
+
+    # float4 loads: A vectorized along BK, B along BN (both must be mult of 4).
+    if cfg.BK % 4 != 0 or cfg.BN % 4 != 0:
+        return False
+
+    # Static shared memory: A_bk[BM*BK] (transposed, same size) + B_bk[BK*BN].
+    smem = (cfg.BM * cfg.BK + cfg.BK * cfg.BN) * 4
+    if smem > device.shared_mem_per_block:
+        return False
+
+    # Register budget: accumulator tmp + regM + regN.
+    wm_iter = cfg.WM // sub_m
+    wn_iter = cfg.WN // sub_n
+    if (wm_iter * cfg.TM * wn_iter * cfg.TN + wm_iter * cfg.TM +
+            wn_iter * cfg.TN) > device.max_regs_per_thread:
+        return False
+
+    return True
+
+
+def gen_warp_configs(
+    BM=(64, 128),
+    BN=(64, 128),
+    BK=(16, 32),
+    WM=(32, 64),
+    WN=(32, 64),
+    LaneSizeN=(4, 8),
+    TM=(4, 8),
+    TN=(4, 8),
+    device: Device = Device(),
+):
+    """Yield every valid :class:`WarpConfig` from the Cartesian product."""
+    for bm, bn, bk, wm, wn, lane, tm, tn in itertools.product(
+            BM, BN, BK, WM, WN, LaneSizeN, TM, TN):
+        warps = bm * bn // (wm * wn)
+        cfg = WarpConfig(warps * device.warp_size, bm, bn, bk, wm, wn, lane,
+                         tm, tn)
+        if valid_warp(cfg, device):
+            yield cfg
+
+
 if __name__ == "__main__":
     dev = Device()
     for vec in (True, False):
         cfgs = list(gen_configs(vec=vec, device=dev))
-        print(f"vec={int(vec)}: {len(cfgs)} valid configs")
+        print(f"tunable vec={int(vec)}: {len(cfgs)} valid configs")
         for c in cfgs[:5]:
             print("  ", c)
+    warps = list(gen_warp_configs(device=dev))
+    print(f"warp: {len(warps)} valid configs")
+    for c in warps[:5]:
+        print("  ", c)
