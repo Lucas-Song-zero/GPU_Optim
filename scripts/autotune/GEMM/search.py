@@ -31,8 +31,11 @@ sys.path.insert(0, str(HERE))
 
 import constraints  # noqa: E402
 
-BENCH_CU = HERE / "autotune_bench.cu"
-BENCH_BIN = HERE / "autotune_bench"
+BUILD_DIR = REPO / "build"
+AUTOTUNE_BUILD = BUILD_DIR / "autotune"
+
+BENCH_CU = AUTOTUNE_BUILD / "autotune_bench.cu"
+BENCH_BIN = AUTOTUNE_BUILD / "autotune_bench"
 RESULTS_JSON = HERE / "results.json"
 
 DEFAULT_SIZES = (128, 256, 512, 1024, 2048, 4096)
@@ -42,6 +45,19 @@ DEFAULT_ARCH = "sm_120"
 # Config fields printed after the leading cfg index, per kernel.
 TUNE_FIELDS = ("threads", "BM", "BN", "BK", "TM", "TN")
 WARP_FIELDS = ("threads", "BM", "BN", "BK", "WM", "WN", "LaneSizeN", "TM", "TN")
+
+NCU = "/usr/local/cuda-13.3/bin/ncu"
+PROFILE_CU = AUTOTUNE_BUILD / "profile_best.cu"
+PROFILE_BIN = AUTOTUNE_BUILD / "profile_best"
+PROFILE_DIR = REPO / "results" / "profiles"
+PROFILE_SECTIONS = (
+    "SpeedOfLight",
+    "ComputeWorkloadAnalysis",
+    "MemoryWorkloadAnalysis",
+    "Occupancy",
+    "SchedulerStats",
+    "WarpStateStats",
+)
 
 
 def _preamble(kernel_include: str, extra_defines: list[str] | None = None) -> list[str]:
@@ -221,6 +237,78 @@ def render_warp(cfgs) -> str:
     return "\n".join(lines) + "\n"
 
 
+def _render_profile_main(constexpr: str, launch: str) -> str:
+    """Emit a single-config main() with cudaProfilerStart/Stop for ncu."""
+    lines = [
+        "#include <cuda_profiler_api.h>",
+        "",
+        "static float randf() { return (float)(rand() % 1000) / 100.0f - 5.0f; }",
+        "",
+        "int main(int argc, char **argv) {",
+        '    if (argc < 4) { fprintf(stderr, "usage: %s M N K [warmup]\\n", argv[0]); return 1; }',
+        "    int M = atoi(argv[1]), N = atoi(argv[2]), K = atoi(argv[3]);",
+        "    int warmup = argc > 4 ? atoi(argv[4]) : 10;",
+        "    float alpha = 0.5f, beta = 3.0f;",
+        "",
+        "    size_t szA = (size_t)M * K, szB = (size_t)K * N, szC = (size_t)M * N;",
+        "    float *A = (float*)malloc(szA * sizeof(float));",
+        "    float *B = (float*)malloc(szB * sizeof(float));",
+        "    float *C = (float*)malloc(szC * sizeof(float));",
+        "    srand(42);",
+        "    for (size_t i = 0; i < szA; ++i) A[i] = randf();",
+        "    for (size_t i = 0; i < szB; ++i) B[i] = randf();",
+        "    for (size_t i = 0; i < szC; ++i) C[i] = randf();",
+        "    float *dA, *dB, *dC;",
+        "    cudaMalloc(&dA, szA * sizeof(float));",
+        "    cudaMalloc(&dB, szB * sizeof(float));",
+        "    cudaMalloc(&dC, szC * sizeof(float));",
+        "    cudaMemcpy(dA, A, szA * sizeof(float), cudaMemcpyHostToDevice);",
+        "    cudaMemcpy(dB, B, szB * sizeof(float), cudaMemcpyHostToDevice);",
+        "    cudaMemcpy(dC, C, szC * sizeof(float), cudaMemcpyHostToDevice);",
+        "",
+        constexpr,
+        "    dim3 grid((M + BM - 1) / BM, (N + BN - 1) / BN);",
+        "",
+        "    for (int i = 0; i < warmup; ++i) {",
+        f"        {launch}",
+        "    }",
+        "    cudaDeviceSynchronize();",
+        "    cudaProfilerStart();",
+        f"    {launch}",
+        "    cudaDeviceSynchronize();",
+        "    cudaProfilerStop();",
+        "",
+        "    free(A); free(B); free(C);",
+        "    cudaFree(dA); cudaFree(dB); cudaFree(dC);",
+        "    return 0;",
+        "}",
+    ]
+    return "\n".join(lines) + "\n"
+
+
+def render_profile_warp(cfg: dict) -> str:
+    lines = _preamble("GEMM/9_autotune_more.cuh")
+    constexpr = (
+        f"    constexpr int BM = {cfg['BM']}, BN = {cfg['BN']}, BK = {cfg['BK']}, "
+        f"WM = {cfg['WM']}, WN = {cfg['WN']}, LaneSizeN = {cfg['LaneSizeN']}, "
+        f"TM = {cfg['TM']}, TN = {cfg['TN']};"
+    )
+    launch = ("gemm_warp_tunable<BM, BN, BK, WM, WN, LaneSizeN, TM, TN>"
+              f"<<<grid, {cfg['threads']}>>>(M, N, K, alpha, dA, dB, beta, dC);")
+    return "\n".join(lines) + "\n" + _render_profile_main(constexpr, launch)
+
+
+def render_profile_tunable(cfg: dict, vec: int) -> str:
+    lines = _preamble("GEMM/7_autotune.cuh", [f"#define VEC_CONFIG {vec}"])
+    constexpr = (
+        f"    constexpr int T = {cfg['threads']}, BM = {cfg['BM']}, BN = {cfg['BN']}, "
+        f"BK = {cfg['BK']}, TM = {cfg['TM']}, TN = {cfg['TN']};"
+    )
+    launch = ("gemm_tunable<T, BM, BN, BK, TM, TN>"
+              "<<<grid, T>>>(M, N, K, alpha, dA, dB, beta, dC);")
+    return "\n".join(lines) + "\n" + _render_profile_main(constexpr, launch)
+
+
 def compile_bench(nvcc: str, arch: str) -> None:
     cmd = [
         nvcc,
@@ -259,6 +347,89 @@ def run_bench(size: int, repeat: int, fields: tuple[str, ...]) -> list[dict]:
     return records
 
 
+def compile_profile(nvcc: str, arch: str) -> None:
+    cmd = [
+        nvcc,
+        f"-arch={arch}",
+        "-std=c++20",
+        "-O3",
+        "-lineinfo",
+        "-I", str(REPO / "src"),
+        "-o", str(PROFILE_BIN),
+        str(PROFILE_CU),
+    ]
+    print("compiling:", " ".join(cmd))
+    subprocess.run(cmd, cwd=str(REPO), check=True)
+
+
+def run_profile(size: int, kernel: str, warmup: int) -> None:
+    PROFILE_DIR.mkdir(parents=True, exist_ok=True)
+    base = PROFILE_DIR / f"autotune_best_{kernel}_{size}"
+    cmd = [NCU, "--profile-from-start", "off", "--launch-count", "1"]
+    for s in PROFILE_SECTIONS:
+        cmd += ["--section", s]
+    cmd += ["--force-overwrite", "-o", str(base),
+            str(PROFILE_BIN), str(size), str(size), str(size), str(warmup)]
+    print("profiling:", " ".join(cmd))
+    subprocess.run(cmd, cwd=str(REPO), check=True)
+
+    rep = str(base) + ".ncu-rep"
+    txt = base.with_suffix(".txt")
+    csv = base.with_suffix(".csv")
+    with open(txt, "w") as f:
+        subprocess.run([NCU, "-i", rep, "--page", "details",
+                        "--print-details", "all"], stdout=f, check=True)
+        f.write("\nSection: Warp Stall Breakdown (cycles/issue):\n")
+        raw = subprocess.run([NCU, "-i", rep, "--page", "raw"],
+                             capture_output=True, text=True, check=True)
+        for line in raw.stdout.splitlines():
+            if ("smsp__average_warps_issue_stalled_" in line
+                    and "_per_issue_active.ratio" in line):
+                f.write(line + "\n")
+    with open(csv, "w") as f:
+        subprocess.run([NCU, "-i", rep, "--csv", "--page", "details"],
+                       stdout=f, check=True)
+    print(f"wrote {rep}")
+    print(f"      {txt}")
+    print(f"      {csv}")
+
+
+def profile_best(args) -> None:
+    if not RESULTS_JSON.exists():
+        print(f"error: {RESULTS_JSON} not found; run a search first",
+              file=sys.stderr)
+        sys.exit(1)
+    records = json.loads(RESULTS_JSON.read_text())
+    if not records:
+        print(f"error: {RESULTS_JSON} is empty", file=sys.stderr)
+        sys.exit(1)
+    is_warp = "WM" in records[0]
+    if is_warp != (args.kernel == "warp"):
+        print(f"error: {RESULTS_JSON} holds {'warp' if is_warp else 'tunable'} "
+              f"results, but --kernel={args.kernel} was given", file=sys.stderr)
+        sys.exit(1)
+    fields = WARP_FIELDS if args.kernel == "warp" else TUNE_FIELDS
+    sizes = [int(s) for s in args.sizes.split(",") if s.strip()]
+    for size in sizes:
+        ok = [r for r in records if r["size"] == size and r["ok"]]
+        if not ok:
+            print(f"size={size}: no valid config in results.json; skipped",
+                  file=sys.stderr)
+            continue
+        best = max(ok, key=lambda r: r["gflops"])
+        desc = " ".join(f"{f}={best[f]}" for f in fields)
+        print(f"size={size}: profiling best cfg {best['cfg']} "
+              f"({best['gflops']:.1f} GFLOPS)  {desc}")
+        if args.kernel == "warp":
+            source = render_profile_warp(best)
+        else:
+            source = render_profile_tunable(best, args.vec)
+        AUTOTUNE_BUILD.mkdir(parents=True, exist_ok=True)
+        PROFILE_CU.write_text(source)
+        compile_profile(args.nvcc, args.arch)
+        run_profile(size, args.kernel, args.profile_warmup)
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description="GEMM autotune search driver")
     ap.add_argument("--sizes", default=",".join(map(str, DEFAULT_SIZES)),
@@ -272,7 +443,16 @@ def main() -> None:
     ap.add_argument("--arch", default=DEFAULT_ARCH)
     ap.add_argument("--smem-kb", type=int, default=48,
                     help="static shared-mem budget in KB")
+    ap.add_argument("--profile-best", action="store_true",
+                    help="profile the best config from results.json via ncu "
+                         "(ncu needs root: run 'sudo python search.py --profile-best ...')")
+    ap.add_argument("--profile-warmup", type=int, default=10,
+                    help="warmup iterations inside the profile binary")
     args = ap.parse_args()
+
+    if args.profile_best:
+        profile_best(args)
+        return
 
     sizes = [int(s) for s in args.sizes.split(",") if s.strip()]
     dev = constraints.Device(shared_mem_per_block=args.smem_kb * 1024)
@@ -288,6 +468,7 @@ def main() -> None:
 
     print(f"{len(cfgs)} valid configs (kernel={args.kernel})")
 
+    AUTOTUNE_BUILD.mkdir(parents=True, exist_ok=True)
     BENCH_CU.write_text(source)
     compile_bench(args.nvcc, args.arch)
 

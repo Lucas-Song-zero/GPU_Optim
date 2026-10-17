@@ -1,8 +1,10 @@
+#include <algorithm>
 #include <cstdio>
 #include <cstdlib>
 #include <ctime>
 #include <fstream>
 #include <iostream>
+#include <cuda_profiler_api.h>
 #include <runner.cuh>
 #include <vector>
 
@@ -11,16 +13,68 @@
 const std::string errLogFile = "matrixValidationFailure.txt";
 
 int main(int argc, char **argv) {
-  if (argc != 2) {
-    std::cerr << "Please select a kernel (range 0 - 12, 0 for NVIDIA cuBLAS)"
+  // --- parse command-line arguments (flag-only) ---
+  int kernel_num = -1;
+  int M = 4096, N = 4096, K = 4096;
+  int warmup = 10;
+  std::string mode = "benchmark";
+
+  for (int i = 1; i < argc; i++) {
+    std::string arg = argv[i];
+    if (arg == "--kernel") {
+      if (++i >= argc) {
+        std::cerr << "--kernel requires a value" << std::endl;
+        exit(EXIT_FAILURE);
+      }
+      kernel_num = std::stoi(argv[i]);
+    } else if (arg == "--M") {
+      if (++i >= argc) {
+        std::cerr << "--M requires a value" << std::endl;
+        exit(EXIT_FAILURE);
+      }
+      M = std::stoi(argv[i]);
+    } else if (arg == "--N") {
+      if (++i >= argc) {
+        std::cerr << "--N requires a value" << std::endl;
+        exit(EXIT_FAILURE);
+      }
+      N = std::stoi(argv[i]);
+    } else if (arg == "--K") {
+      if (++i >= argc) {
+        std::cerr << "--K requires a value" << std::endl;
+        exit(EXIT_FAILURE);
+      }
+      K = std::stoi(argv[i]);
+    } else if (arg == "--warmup") {
+      if (++i >= argc) {
+        std::cerr << "--warmup requires a value" << std::endl;
+        exit(EXIT_FAILURE);
+      }
+      warmup = std::stoi(argv[i]);
+    } else if (arg == "--mode") {
+      if (++i >= argc) {
+        std::cerr << "--mode requires a value" << std::endl;
+        exit(EXIT_FAILURE);
+      }
+      mode = argv[i];
+    } else {
+      std::cerr << "Unknown argument: " << arg << std::endl;
+      exit(EXIT_FAILURE);
+    }
+  }
+
+  if (kernel_num < 0 || kernel_num > 12) {
+    std::cerr << "Please specify a valid kernel number via --kernel (0-12)"
               << std::endl;
     exit(EXIT_FAILURE);
   }
-
-  // get kernel number
-  int kernel_num = std::stoi(argv[1]);
-  if (kernel_num < 0 || kernel_num > 12) {
-    std::cerr << "Please enter a valid kernel number (0-12)" << std::endl;
+  if (mode != "benchmark" && mode != "profile") {
+    std::cerr << "Unknown mode: " << mode << " (use benchmark or profile)"
+              << std::endl;
+    exit(EXIT_FAILURE);
+  }
+  if (M <= 0 || N <= 0 || K <= 0) {
+    std::cerr << "M/N/K must be positive" << std::endl;
     exit(EXIT_FAILURE);
   }
 
@@ -56,7 +110,14 @@ int main(int argc, char **argv) {
   std::vector<int> SIZE = {128, 256, 512, 1024, 2048, 4096};
 
   long m, n, k, max_size;
-  max_size = SIZE[SIZE.size() - 1];
+  if (mode == "profile") {
+    m = M;
+    n = N;
+    k = K;
+    max_size = std::max(std::max(M, N), K);
+  } else {
+    max_size = SIZE[SIZE.size() - 1];
+  }
   std::cout << "Max size: " << max_size << std::endl;
 
   float alpha = 0.5, beta = 3.0; // GEMM input parameters, C=α*AB+β*C
@@ -90,67 +151,110 @@ int main(int argc, char **argv) {
                        cudaMemcpyHostToDevice));
 
   int repeat_times = 50;
-  for (int size : SIZE) {
-    m = n = k = size;
 
-    std::cout << "dimensions(m=n=k) " << m << ", alpha: " << alpha
-              << ", beta: " << beta << std::endl;
-    // Verify the correctness of the calculation, and execute it once before the
-    // kernel function timing to avoid cold start errors
+  if (mode == "benchmark") {
+    for (int size : SIZE) {
+      m = n = k = size;
+
+      std::cout << "dimensions(m=n=k) " << m << ", alpha: " << alpha
+                << ", beta: " << beta << std::endl;
+      // Verify the correctness of the calculation, and execute it once before
+      // the kernel function timing to avoid cold start errors
+      if (kernel_num != 0) {
+        run_kernel(0, m, n, k, alpha, dA, dB, beta, dC_ref,
+                   handle); // cuBLAS
+        run_kernel(kernel_num, m, n, k, alpha, dA, dB, beta, dC,
+                   handle); // Executes the kernel, modifies the result matrix
+        cudaCheck(cudaDeviceSynchronize());
+        cudaCheck(cudaGetLastError()); // Check for async errors during kernel run
+        cudaMemcpy(C, dC, sizeof(float) * m * n, cudaMemcpyDeviceToHost);
+        cudaMemcpy(C_ref, dC_ref, sizeof(float) * m * n,
+                   cudaMemcpyDeviceToHost);
+
+        if (!verify_matrix(C_ref, C, m * n)) {
+          std::cout
+              << "Failed to pass the correctness verification against NVIDIA "
+                 "cuBLAS."
+              << std::endl;
+          if (m <= 128) {
+            std::cout << " Logging faulty output into " << errLogFile << "\n";
+            std::ofstream fs;
+            fs.open(errLogFile);
+            fs << "A:\n";
+            print_matrix(A, m, n, fs);
+            fs << "B:\n";
+            print_matrix(B, m, n, fs);
+            fs << "C:\n";
+            print_matrix(C, m, n, fs);
+            fs << "Should:\n";
+            print_matrix(C_ref, m, n, fs);
+          }
+          exit(EXIT_FAILURE);
+        }
+      }
+
+      cudaEventRecord(beg);
+      for (int j = 0; j < repeat_times; j++) {
+        // We don't reset dC between runs to save time
+        run_kernel(kernel_num, m, n, k, alpha, dA, dB, beta, dC, handle);
+      }
+      cudaEventRecord(end);
+      cudaEventSynchronize(beg);
+      cudaEventSynchronize(end);
+      cudaEventElapsedTime(&elapsed_time, beg, end);
+      elapsed_time /= 1000.; // Convert to seconds
+
+      long flops = 2 * m * n * k;
+      printf(
+          "Average elapsed time: (%7.6f) s, performance: (%7.1f) GFLOPS. size: "
+          "(%ld).\n",
+          elapsed_time / repeat_times,
+          (repeat_times * flops * 1e-9) / elapsed_time, m);
+      fflush(stdout);
+      // make dC and dC_ref equal again (we modified dC while calling our kernel
+      // for benchmarking)
+      cudaCheck(cudaMemcpy(dC, dC_ref, sizeof(float) * m * n,
+                           cudaMemcpyDeviceToDevice));
+    }
+  } else {
+    // profile mode: fixed M/N/K. Verify correctness once, warm up to reach a
+    // steady state, then profile exactly one target-kernel launch inside
+    // cudaProfilerStart/Stop.
+    m = M;
+    n = N;
+    k = K;
+
     if (kernel_num != 0) {
-      run_kernel(0, m, n, k, alpha, dA, dB, beta, dC_ref,
-                 handle); // cuBLAS
-      run_kernel(kernel_num, m, n, k, alpha, dA, dB, beta, dC,
-                 handle); // Executes the kernel, modifies the result matrix
+      run_kernel(0, m, n, k, alpha, dA, dB, beta, dC_ref, handle); // cuBLAS
+      run_kernel(kernel_num, m, n, k, alpha, dA, dB, beta, dC, handle);
       cudaCheck(cudaDeviceSynchronize());
-      cudaCheck(cudaGetLastError()); // Check for async errors during kernel run
+      cudaCheck(cudaGetLastError());
       cudaMemcpy(C, dC, sizeof(float) * m * n, cudaMemcpyDeviceToHost);
-      cudaMemcpy(C_ref, dC_ref, sizeof(float) * m * n, cudaMemcpyDeviceToHost);
+      cudaMemcpy(C_ref, dC_ref, sizeof(float) * m * n,
+                 cudaMemcpyDeviceToHost);
 
       if (!verify_matrix(C_ref, C, m * n)) {
         std::cout
             << "Failed to pass the correctness verification against NVIDIA "
                "cuBLAS."
             << std::endl;
-        if (m <= 128) {
-          std::cout << " Logging faulty output into " << errLogFile << "\n";
-          std::ofstream fs;
-          fs.open(errLogFile);
-          fs << "A:\n";
-          print_matrix(A, m, n, fs);
-          fs << "B:\n";
-          print_matrix(B, m, n, fs);
-          fs << "C:\n";
-          print_matrix(C, m, n, fs);
-          fs << "Should:\n";
-          print_matrix(C_ref, m, n, fs);
-        }
         exit(EXIT_FAILURE);
       }
     }
 
-    cudaEventRecord(beg);
-    for (int j = 0; j < repeat_times; j++) {
-      // We don't reset dC between runs to save time
+    // Warm-up: establish stable clocks/caches/code paths before profiling.
+    for (int i = 0; i < warmup; ++i) {
       run_kernel(kernel_num, m, n, k, alpha, dA, dB, beta, dC, handle);
     }
-    cudaEventRecord(end);
-    cudaEventSynchronize(beg);
-    cudaEventSynchronize(end);
-    cudaEventElapsedTime(&elapsed_time, beg, end);
-    elapsed_time /= 1000.; // Convert to seconds
+    cudaCheck(cudaDeviceSynchronize());
+    cudaCheck(cudaGetLastError());
 
-    long flops = 2 * m * n * k;
-    printf(
-        "Average elapsed time: (%7.6f) s, performance: (%7.1f) GFLOPS. size: "
-        "(%ld).\n",
-        elapsed_time / repeat_times,
-        (repeat_times * flops * 1e-9) / elapsed_time, m);
-    fflush(stdout);
-    // make dC and dC_ref equal again (we modified dC while calling our kernel
-    // for benchmarking)
-    cudaCheck(cudaMemcpy(dC, dC_ref, sizeof(float) * m * n,
-                         cudaMemcpyDeviceToDevice));
+    // Profile exactly one launch.
+    cudaProfilerStart();
+    run_kernel(kernel_num, m, n, k, alpha, dA, dB, beta, dC, handle);
+    cudaCheck(cudaDeviceSynchronize());
+    cudaCheck(cudaGetLastError());
+    cudaProfilerStop();
   }
 
   // Free up CPU and GPU space

@@ -1,0 +1,25 @@
+# build artifacts
+build/
+
+# profiling / experiment output
+results/
+
+# Python cache
+__pycache__/
+*.pyc
+
+# generated autotune artifacts (source + binaries live in build/autotune now)
+scripts/autotune/GEMM/autotune_bench
+scripts/autotune/GEMM/autotune_bench.cu
+scripts/autotune/GEMM/bench_cublas
+scripts/autotune/GEMM/profile_best
+scripts/autotune/GEMM/profile_best.cu
+scripts/autotune/GEMM/results.json
+scripts/autotune/GEMM/recovery_ratio.png
+
+# stale root binaries / runtime dumps
+/gemm
+/gemm_dbg
+/gemm_ncu
+/matrixValidationFailure.txt
+/warp.csv
