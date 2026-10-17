@@ -74,8 +74,8 @@ GPU_Optim/
 │   │   ├── 7_autotune.cuh
 │   │   ├── 8_warp_tiling.cuh
 │   │   ├── 9_autotune_more.cuh
-│   │   └── 9_double_buffer.cuh   # placeholder (empty)
-│   ├── Attention/                # reserved (empty)
+│   │   └── 9_double_buffer.cuh   
+│   ├── Attention/                # more Attention part optimization
 │   ├── kernels.cuh               # includes all kernels
 │   ├── runner.cu                 # kernel dispatch + helpers
 │   └── runner.cuh

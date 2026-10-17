@@ -72,8 +72,8 @@ GPU_Optim/
 │   │   ├── 7_autotune.cuh
 │   │   ├── 8_warp_tiling.cuh
 │   │   ├── 9_autotune_more.cuh
-│   │   └── 9_double_buffer.cuh   # 占位（空）
-│   ├── Attention/                # 预留（空）
+│   │   └── 9_double_buffer.cuh   
+│   ├── Attention/                # 注意力部分的加速
 │   ├── kernels.cuh               # 包含所有内核
 │   ├── runner.cu                 # 内核分发 + 工具函数
 │   └── runner.cuh
