@@ -161,7 +161,7 @@ GFLOPS from stdout into `results.json`.
 
 ## Profiling Metrics Reference
 
-Since GFLOPS saturates once `M = N = K` reaches 4096, profiling is done at that
+Since GFLOPS saturates when `M = N = K` reaches around 4096, profiling is done at that
 fixed size. The metrics below are the ones we watch, grouped by category.
 
 ### 1. Compute Throughput

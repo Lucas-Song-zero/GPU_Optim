@@ -50,6 +50,9 @@ NCU = "/usr/local/cuda-13.3/bin/ncu"
 PROFILE_CU = AUTOTUNE_BUILD / "profile_best.cu"
 PROFILE_BIN = AUTOTUNE_BUILD / "profile_best"
 PROFILE_DIR = REPO / "results" / "profiles"
+PROFILE_REP_DIR = PROFILE_DIR / "ncu-rep"
+PROFILE_TXT_DIR = PROFILE_DIR / "txt"
+PROFILE_CSV_DIR = PROFILE_DIR / "csv"
 PROFILE_SECTIONS = (
     "SpeedOfLight",
     "ComputeWorkloadAnalysis",
@@ -363,8 +366,11 @@ def compile_profile(nvcc: str, arch: str) -> None:
 
 
 def run_profile(size: int, kernel: str, warmup: int) -> None:
-    PROFILE_DIR.mkdir(parents=True, exist_ok=True)
-    base = PROFILE_DIR / f"autotune_best_{kernel}_{size}"
+    PROFILE_REP_DIR.mkdir(parents=True, exist_ok=True)
+    PROFILE_TXT_DIR.mkdir(parents=True, exist_ok=True)
+    PROFILE_CSV_DIR.mkdir(parents=True, exist_ok=True)
+    name = f"autotune_best_{kernel}_{size}"
+    base = PROFILE_REP_DIR / name
     cmd = [NCU, "--profile-from-start", "off", "--launch-count", "1"]
     for s in PROFILE_SECTIONS:
         cmd += ["--section", s]
@@ -374,8 +380,8 @@ def run_profile(size: int, kernel: str, warmup: int) -> None:
     subprocess.run(cmd, cwd=str(REPO), check=True)
 
     rep = str(base) + ".ncu-rep"
-    txt = base.with_suffix(".txt")
-    csv = base.with_suffix(".csv")
+    txt = PROFILE_TXT_DIR / f"{name}.txt"
+    csv = PROFILE_CSV_DIR / f"{name}.csv"
     with open(txt, "w") as f:
         subprocess.run([NCU, "-i", rep, "--page", "details",
                         "--print-details", "all"], stdout=f, check=True)

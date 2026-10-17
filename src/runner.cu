@@ -235,6 +235,9 @@ void run_kernel(int kernel_num, int M, int N, int K, float alpha, float *A, floa
         case 8:
             run_gemm_warp_tiling(M, N, K, alpha, A, B, beta, C);
             break;
+        case 9:
+            throw std::invalid_argument("Autotune is used by Python, not supported in runner.cu yet");
+            break;
         default:
             throw std::invalid_argument("Wrong kernel number, undefined");
     }
