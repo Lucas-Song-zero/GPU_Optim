@@ -281,8 +281,7 @@ Kernel 5 将 occupancy 从 66.67% 降到 33.33% 后仍然更快，因为 registe
 3. **直接采集 bank-conflict counter。** 对候选 tile 检查 `l1tex__data_bank_conflicts...`，不要仅通过 MIO Throttle 间接推断。
 4. **分离边界处理与 fast path。** 对满足 tile/vector 对齐的 shape 使用快速 kernel，对不规则 shape 使用 guarded fallback。
 5. **建立 shape-aware dispatch。** 小矩阵可能由 kernel 2 或轻量 kernel 占优，大矩阵由 autotuned tiling kernel 主导。
-6. **加入 cuBLAS/cuBLASLt 基线。** 保证 datatype、accumulation mode、时钟、warmup 和计时方式一致。
-7. **报告稳定性。** 多次运行并记录 median、tail latency、GPU clock、power 与 thermal state，避免 autotune 被单次噪声误导。
+6. **报告稳定性。** 多次运行并记录 median、tail latency、GPU clock、power 与 thermal state，避免 autotune 被单次噪声误导。
 
 ---
 

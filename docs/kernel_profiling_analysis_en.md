@@ -288,8 +288,7 @@ The current best kernel reaches 54.2 TFLOPS but still uses only about 54% FMA ut
 3. **Profile shared-memory bank conflicts directly.** Confirm that the transposed layout minimizes `l1tex__data_bank_conflicts...` counters for all candidate tile shapes; do not infer this only from MIO Throttle.
 4. **Separate edge handling from the fast path.** Keep aligned vectorized kernels for dimensions divisible by tile/vector sizes and use a guarded fallback for irregular shapes.
 5. **Use shape-aware dispatch.** Kernel 2 is stronger for some small sizes, while autotuned tiled kernels dominate at large sizes. Build a lookup or small runtime heuristic keyed by M/N/K, alignment, and possibly batch size.
-6. **Benchmark against a library baseline.** Compare with the relevant cuBLAS/cuBLASLt configuration under identical datatype, accumulation mode, clocks, warmup, and timing methodology.
-7. **Report stability.** Record median and tail latency across repeated runs, along with GPU clock, power, and thermal state. Autotuning decisions should not depend on a single noisy timing sample.
+6. **Report stability.** Record median and tail latency across repeated runs, along with GPU clock, power, and thermal state. Autotuning decisions should not depend on a single noisy timing sample.
 
 ---
 
