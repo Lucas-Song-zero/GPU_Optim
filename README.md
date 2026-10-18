@@ -27,7 +27,7 @@ the naive kernel and **66.9%** of cuBLAS on the same device.
 | 7. 2D block tiling (autotuned) | 52509 | 55.8× |
 | **9. warp tiling (autotuned)** | **54228** | **57.7×** |
 
-A detailed per-step ablation report is in [`docs/ablation.md`](docs/ablation.md).
+A detailed per-step ablation report is in [`docs/profiling_analysis.md`](docs/kernel_profiling_analysis_en.md).
 
 ## Environment
 

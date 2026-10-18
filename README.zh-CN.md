@@ -26,7 +26,7 @@ cuBLAS 的 **66.9%**。
 | 7. 2D block tiling（自动调优） | 52509 | 55.8× |
 | **9. warp tiling（自动调优）** | **54228** | **57.7×** |
 
-逐步优化的详细 ablation 报告见 [`docs/ablation.md`](docs/ablation.md)。
+逐步优化的详细 ablation 报告见 [`docs/profiling_analysis.md`](docs/kernel_profiling_analysis.zh-CN.md)。
 
 ## 环境
 
