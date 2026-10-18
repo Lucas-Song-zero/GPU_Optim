@@ -216,4 +216,4 @@ python scripts/autotune/GEMM/ablation_plot.py             # 重新生成图
 ## 结果
 
 完整的分步 ablation、各尺寸最优配置与复现命令见
-[`docs/ablation.md`](docs/ablation.md)。
+[`docs/profiling_analysis.md`](docs/kernel_profiling_analysis.zh-CN.md)。

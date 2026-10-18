@@ -71,7 +71,7 @@
 
 ## 4. 瓶颈演进总览
 
-| 迁移 | 核心改动 | 关键证据 | 收益 | 新瓶颈或代价 |
+| 迁移 | 核心改动 | 关键指标 | 收益 | 新瓶颈或代价 |
 |---|---|---|---|---|
 | 1 -> 2 | Warp 内访存合并 | LG Throttle 119.57 -> 8.90；1.54 -> 10.11 GB/s | 4096 上 6.4x | Global/L1 load 管线仍有压力 |
 | 2 -> 3 | Shared memory 复用 global 数据 | 指令 16.67B -> 5.60B；LG 8.90 -> 0.40 | 1.54x | MIO Throttle 升至 23.79 |
@@ -101,7 +101,7 @@
 
 两个 kernel 的总指令数相同，因此收益来自访问效率，而非工作量减少。Kernel 2 的 LG Throttle 仍有 8.90 cycles/issue，说明 global/L1 load 路径仍然昂贵。
 
-**诊断：** coalescing 修复了最严重的访存模式，但每个输出元素仍反复通过 global/L1 路径取数。
+**分析：** coalescing 修复了最严重的访存模式，但每个输出元素仍反复通过 global/L1 路径取数。
 
 ### 5.2 Kernel 2 -> Kernel 3：Shared-memory tiling
 
@@ -120,7 +120,7 @@ Kernel 3 将 A/B tile 搬入 shared memory，再由 block 内线程复用。
 
 IPC 和 FMA utilization 虽然下降，但总指令数降到约三分之一，工作量减少足以抵消每条指令平均成本上升。
 
-**诊断：** shared memory 减少了 global load，但每线程仍只计算一个 C 元素，SMEM read 次数接近 FMA 次数。瓶颈由 LG Throttle 转移为 MIO Throttle。
+**分析：** shared memory 减少了 global load，但每线程仍只计算一个 C 元素，SMEM read 次数接近 FMA 次数。瓶颈由 LG Throttle 转移为 MIO Throttle。
 
 ### 5.3 Kernel 3 -> Kernel 4：1D register tiling
 
@@ -139,7 +139,7 @@ Kernel 4 让每个线程计算 `TM=8` 个输出，一个从 SMEM 读入寄存器
 
 Short Scoreboard 从 0.43 升到 2.47 cycles/issue，因为多个 FMA 依赖同一个刚加载的寄存器值。相较于反复发出 SMEM load 并堵塞 MIO，这是一项有利交换。
 
-**诊断：** 这是第一次通过寄存器复用真正提高算术强度，而不是把访存压力转移到另一层。
+**分析：** 这是第一次通过寄存器复用真正提高算术强度，而不是把访存压力转移到另一层。
 
 ### 5.4 Kernel 4 -> Kernel 5：2D register tiling
 
@@ -160,7 +160,7 @@ Kernel 5 将每线程输出扩展为 `8 x 8` tile。A、B 两侧均缓存到寄�
 
 这一步使计算管线首次超过 load/store 管线，但 64 个累加器和操作数寄存器将用量推到 95 registers/thread，活跃 warp 数减半。
 
-**诊断：** 2D tiling 消除了大部分 SMEM traffic stall，提高了单 warp 效率；代价是寄存器压力限制 resident warp 数。
+**分析：** 2D tiling 消除了大部分 SMEM traffic stall，提高了单 warp 效率；代价是寄存器压力限制 resident warp 数。
 
 ### 5.5 Kernel 5 -> Kernel 6：向量化
 
@@ -179,7 +179,7 @@ Kernel 6 使用 `float4` 完成 global-to-shared load 和 C store。
 
 Vectorization 减少了指令数，却没有改善寄存器限制的 occupancy 和 SMEM bank conflict。Long Scoreboard、MIO Throttle 与 Barrier stall 略有增加，抵消了大部分收益。
 
-**诊断：** `float4` 本身有效，但当前 kernel 已不再受标量访存指令数主导，因此只能提供增量收益。
+**分析：** `float4` 本身有效，但当前 kernel 已不再受标量访存指令数主导，因此只能提供增量收益。
 
 ### 5.6 Kernel 6 -> Kernel 8：Warp tiling 与 SMEM 布局
 
@@ -213,7 +213,7 @@ Warp tiling 显式划分 warp 级输出 tile，并转置 A 在 shared memory 中
 
 需要修正早期预期：warp tiling 在这里**没有**降低寄存器压力或提高 occupancy。寄存器由 95 增至 106，occupancy 仍为 33.33%。收益来自消除 SMEM contention，并让每次 load 对应更多有效计算。
 
-**诊断：** kernel 8 已转为 compute-dominant，不再受 DRAM bandwidth 或 MIO congestion 限制。主要剩余 stall 是 Long Scoreboard 暴露出的 global-load latency。
+**分析：** kernel 8 已转为 compute-dominant，不再受 DRAM bandwidth 或 MIO congestion 限制。主要剩余 stall 是 Long Scoreboard 暴露出的 global-load latency。
 
 ### 5.7 Kernel 8 -> Kernel 9：Warp autotuning
 
@@ -244,7 +244,7 @@ Warp tiling 显式划分 warp 级输出 tile，并转置 A 在 shared memory 中
 
 最重要的结论是：autotuned kernel 并非通过提高 occupancy 获胜。Registers/thread 与 SMEM/block 都上升，occupancy 仍处于同一个寄存器限制档位。最优配置是在有限 resident warp 上做了更多有效工作。
 
-**诊断：** autotuner 找到了 tile depth、vector width、warp geometry 与 per-thread work 之间更好的平衡。收益来自相同 occupancy 档位下更高的 FMA 利用率。
+**分析：** autotuner 找到了 tile depth、vector width、warp geometry 与 per-thread work 之间更好的平衡。收益来自相同 occupancy 档位下更高的 FMA 利用率。
 
 ---
 

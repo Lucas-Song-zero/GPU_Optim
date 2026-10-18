@@ -76,7 +76,7 @@ The more advanced tiled kernels are slower at small sizes because launch, synchr
 
 ## 4. Bottleneck Evolution
 
-| Transition | Main change | Primary evidence | Result | New limit / cost |
+| Transition | Main change | Primary Metrics | Result | New limit / cost |
 |---|---|---|---|---|
 | 1 -> 2 | Make warp accesses coalesced | LG Throttle 119.57 -> 8.90; memory throughput 1.54 -> 10.11 GB/s | 6.4x at 4096 | Global/L1 load pipeline still costly |
 | 2 -> 3 | Reuse global data through shared memory | Instructions 16.67B -> 5.60B; LG Throttle 8.90 -> 0.40 | 1.54x | MIO Throttle rises to 23.79 |

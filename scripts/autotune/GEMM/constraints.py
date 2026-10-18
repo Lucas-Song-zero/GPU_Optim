@@ -37,7 +37,11 @@ class Device:
     # static __shared__ arrays, so the dynamic opt-in path does not apply.
     shared_mem_per_block: int = 48 * 1024
     # Heuristic: accumulator tmp[TM*TN] + regM[TM] + regN[TN] + addressing.
-    max_regs_per_thread: int = 128
+    # Raised to 256 to admit cuBLAS-style budgets: cuBLAS's SIMT SGEMM runs
+    # ~200 registers/thread (128 accumulators + prefetch/address regs) at only
+    # 16.67% occupancy and still hits 68.8% FMA utilization.  Our warp kernel
+    # reaches the same 128 accumulators via WM=WN=64 (needs ~152 regs).
+    max_regs_per_thread: int = 256
     warp_size: int = 32
 
 
@@ -151,7 +155,7 @@ def valid_warp(cfg: WarpConfig, device: Device) -> bool:
 
 
 def gen_warp_configs(
-    BM=(64, 128),
+    BM=(64, 128, 256),
     BN=(64, 128),
     BK=(16, 32),
     WM=(32, 64),

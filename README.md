@@ -219,5 +219,5 @@ From `WarpStateStats` and `SchedulerStats`.
 
 ## Results
 
-See [`docs/ablation.md`](docs/ablation.md) for the full step-by-step ablation,
+See [`docs/profiling_analysis.md`](docs/kernel_profiling_analysis_en.md) for the full step-by-step ablation,
 per-size optimal configurations, and reproduction commands.
