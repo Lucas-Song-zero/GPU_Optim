@@ -9,3 +9,5 @@
 #include "GEMM/7_autotune.cuh"
 #include "GEMM/8_warp_tiling.cuh"
 #include "GEMM/9_autotune_more.cuh"
+
+#include "Attention/Prefill/1_naive_prefill.cuh"

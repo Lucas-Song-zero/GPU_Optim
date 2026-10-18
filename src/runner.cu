@@ -206,7 +206,7 @@ void run_gemm_warp_tiling(int M, int N, int K, float alpha, float *A, float *B, 
     <<<gridDim, blockDim>>>(M, N, K, alpha, A, B, beta, C);
 }
 
-void run_kernel(int kernel_num, int M, int N, int K, float alpha, float *A, float *B, float beta, float *C, cublasHandle_t handle){
+void run_gemm_kernel(int kernel_num, int M, int N, int K, float alpha, float *A, float *B, float beta, float *C, cublasHandle_t handle){
     switch(kernel_num){
         case 0:
             runCublasFP32(handle, M, N, K, alpha, A, B, beta, C);
@@ -241,4 +241,75 @@ void run_kernel(int kernel_num, int M, int N, int K, float alpha, float *A, floa
         default:
             throw std::invalid_argument("Wrong kernel number, undefined");
     }
+}
+
+// ---------------------------------------------------------------------------
+// Attention prefill
+// ---------------------------------------------------------------------------
+
+// host softmax without max-subtraction (matches the naive prefill kernel).
+static void softmax_rows(const float *S, float *P, int Nq, int Nk) {
+  for (int q = 0; q < Nq; q++) {
+    float total = 0.0f;
+    for (int k = 0; k < Nk; k++)
+      total += expf(S[q * Nk + k]);
+    for (int k = 0; k < Nk; k++)
+      P[q * Nk + k] = expf(S[q * Nk + k]) / total;
+  }
+}
+
+// run naive prefill: one thread per query row, serial over Nk and d.
+void run_prefill_naive(int Nq, int Nk, int d, const float *Q, const float *K,
+                       const float *V, float *S, float *P, float *O) {
+  int threads = 256;
+  int blocks = div_ceil(Nq, threads);
+  prefill_naive<<<blocks, threads>>>(Nq, Nk, d, Q, K, V, S, P, O);
+}
+
+// run cuBLAS reference: S = Q K^T / sqrt(d); P = softmax(S); O = P V.
+// softmax is computed on the host (cuBLAS has no softmax), so S/P round-trip
+// through a cached host staging buffer.
+void run_prefill_cublas(cublasHandle_t handle, int Nq, int Nk, int d,
+                        const float *Q, const float *K, const float *V,
+                        float *S, float *P, float *O) {
+  static float *S_host = nullptr, *P_host = nullptr;
+  static int cap = 0;
+  int n = Nq * Nk;
+  if (n > cap) {
+    free(S_host);
+    free(P_host);
+    S_host = (float *)malloc(sizeof(float) * n);
+    P_host = (float *)malloc(sizeof(float) * n);
+    cap = n;
+  }
+
+  float alpha = 1.0f / sqrtf((float)d), beta = 0.0f;
+  cublasSgemm(handle, CUBLAS_OP_T, CUBLAS_OP_N, Nk, Nq, d, &alpha, K, d, Q, d,
+              &beta, S, Nk);
+  cudaCheck(cudaDeviceSynchronize(), __FILE__, __LINE__);
+  cudaCheck(cudaMemcpy(S_host, S, sizeof(float) * n, cudaMemcpyDeviceToHost),
+            __FILE__, __LINE__);
+  softmax_rows(S_host, P_host, Nq, Nk);
+  cudaCheck(cudaMemcpy(P, P_host, sizeof(float) * n, cudaMemcpyHostToDevice),
+            __FILE__, __LINE__);
+
+  float one = 1.0f, zero = 0.0f;
+  cublasSgemm(handle, CUBLAS_OP_N, CUBLAS_OP_N, d, Nq, Nk, &one, V, d, P, Nk,
+              &zero, O, d);
+  cudaCheck(cudaDeviceSynchronize(), __FILE__, __LINE__);
+}
+
+void run_prefill_kernel(int kernel_num, int Nq, int Nk, int d, float *Q,
+                        float *K, float *V, float *S, float *P, float *O,
+                        cublasHandle_t handle) {
+  switch (kernel_num) {
+    case 0:
+      run_prefill_cublas(handle, Nq, Nk, d, Q, K, V, S, P, O);
+      break;
+    case 1:
+      run_prefill_naive(Nq, Nk, d, Q, K, V, S, P, O);
+      break;
+    default:
+      throw std::invalid_argument("Wrong prefill kernel number, undefined");
+  }
 }

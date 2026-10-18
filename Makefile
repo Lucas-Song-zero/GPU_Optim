@@ -6,8 +6,9 @@ CXXSTD = c++20
 
 # --- sources & includes ---
 INCLUDES = -I src
-SRC = scripts/gemm.cu src/runner.cu
-HEADERS = $(wildcard src/*.cuh src/GEMM/*.cuh)
+SRC_GEMM = scripts/gemm.cu src/runner.cu
+SRC_ATTN = scripts/attention_prefill.cu src/runner.cu
+HEADERS = $(wildcard src/*.cuh src/GEMM/*.cuh src/Attention/*.cuh)
 LIBS = -lcublas
 
 # --- targets ---
@@ -15,23 +16,24 @@ BUILD_DIR = build
 TARGET = $(BUILD_DIR)/gemm
 DEBUG_TARGET = $(BUILD_DIR)/gemm_dbg
 NCU_TARGET = $(BUILD_DIR)/gemm_ncu
+ATTN_TARGET = $(BUILD_DIR)/attention_prefill
 
 # --- flags ---
 COMMON = -arch=$(ARCH) -std=$(CXXSTD) $(INCLUDES)
 RELEASE = $(COMMON) -O3 -lineinfo
 DEBUG = $(COMMON) -G -lineinfo
 
-.PHONY: all debug run run-debug sanitize clean profile
+.PHONY: all debug run run-debug sanitize clean profile attention run-attention
 
 all:
 	@mkdir -p $(BUILD_DIR)
-	$(NVCC) $(COMMON) -o $(TARGET) $(SRC) $(LIBS)
+	$(NVCC) $(COMMON) -o $(TARGET) $(SRC_GEMM) $(LIBS)
 # $(TARGET): $(SRC) $(HEADERS)
 # $(NVCC) $(RELEASE) -o $@ $(SRC) $(LIBS)
 
 debug:
 	@mkdir -p $(BUILD_DIR)
-	$(NVCC) $(DEBUG) -o $(DEBUG_TARGET) $(SRC) $(LIBS)
+	$(NVCC) $(DEBUG) -o $(DEBUG_TARGET) $(SRC_GEMM) $(LIBS)
 
 KERNEL ?= 4
 # support comma-separated list, e.g. KERNEL=1,2,3,4
@@ -56,6 +58,21 @@ run: $(TARGET)
 		./$(TARGET) --kernel $$k; \
 	done
                                                                   
+# --- attention prefill ---
+ATTN_NQ ?= 512
+ATTN_NK ?= 512
+ATTN_D ?= 64
+ATTN_WARMUP ?= 10
+ATTN_REPEAT ?= 50
+
+attention:
+	@mkdir -p $(BUILD_DIR)
+	$(NVCC) $(RELEASE) -o $(ATTN_TARGET) $(SRC_ATTN) $(LIBS)
+
+run-attention: attention
+	./$(ATTN_TARGET) --Nq $(ATTN_NQ) --Nk $(ATTN_NK) --d $(ATTN_D) \
+		--warmup $(ATTN_WARMUP) --repeat $(ATTN_REPEAT)
+
 run-debug: $(DEBUG_TARGET)
 	@for k in $(KERNELS); do \
 		echo "=== kernel $$k ==="; \
@@ -64,7 +81,7 @@ run-debug: $(DEBUG_TARGET)
 
 compile_ncu: 
 	@mkdir -p $(BUILD_DIR)
-	$(NVCC) $(RELEASE) -o $(NCU_TARGET) $(SRC) $(LIBS)
+	$(NVCC) $(RELEASE) -o $(NCU_TARGET) $(SRC_GEMM) $(LIBS)
                                                                   
 profile: compile_ncu
 	@mkdir -p $(PROFILE_REP_DIR) $(PROFILE_TXT_DIR) $(PROFILE_CSV_DIR)

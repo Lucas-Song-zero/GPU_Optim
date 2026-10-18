@@ -161,9 +161,9 @@ int main(int argc, char **argv) {
       // Verify the correctness of the calculation, and execute it once before
       // the kernel function timing to avoid cold start errors
       if (kernel_num != 0) {
-        run_kernel(0, m, n, k, alpha, dA, dB, beta, dC_ref,
+        run_gemm_kernel(0, m, n, k, alpha, dA, dB, beta, dC_ref,
                    handle); // cuBLAS
-        run_kernel(kernel_num, m, n, k, alpha, dA, dB, beta, dC,
+        run_gemm_kernel(kernel_num, m, n, k, alpha, dA, dB, beta, dC,
                    handle); // Executes the kernel, modifies the result matrix
         cudaCheck(cudaDeviceSynchronize());
         cudaCheck(cudaGetLastError()); // Check for async errors during kernel run
@@ -196,7 +196,7 @@ int main(int argc, char **argv) {
       cudaEventRecord(beg);
       for (int j = 0; j < repeat_times; j++) {
         // We don't reset dC between runs to save time
-        run_kernel(kernel_num, m, n, k, alpha, dA, dB, beta, dC, handle);
+        run_gemm_kernel(kernel_num, m, n, k, alpha, dA, dB, beta, dC, handle);
       }
       cudaEventRecord(end);
       cudaEventSynchronize(beg);
@@ -225,8 +225,8 @@ int main(int argc, char **argv) {
     k = K;
 
     if (kernel_num != 0) {
-      run_kernel(0, m, n, k, alpha, dA, dB, beta, dC_ref, handle); // cuBLAS
-      run_kernel(kernel_num, m, n, k, alpha, dA, dB, beta, dC, handle);
+      run_gemm_kernel(0, m, n, k, alpha, dA, dB, beta, dC_ref, handle); // cuBLAS
+      run_gemm_kernel(kernel_num, m, n, k, alpha, dA, dB, beta, dC, handle);
       cudaCheck(cudaDeviceSynchronize());
       cudaCheck(cudaGetLastError());
       cudaMemcpy(C, dC, sizeof(float) * m * n, cudaMemcpyDeviceToHost);
@@ -244,14 +244,14 @@ int main(int argc, char **argv) {
 
     // Warm-up: establish stable clocks/caches/code paths before profiling.
     for (int i = 0; i < warmup; ++i) {
-      run_kernel(kernel_num, m, n, k, alpha, dA, dB, beta, dC, handle);
+      run_gemm_kernel(kernel_num, m, n, k, alpha, dA, dB, beta, dC, handle);
     }
     cudaCheck(cudaDeviceSynchronize());
     cudaCheck(cudaGetLastError());
 
     // Profile exactly one launch.
     cudaProfilerStart();
-    run_kernel(kernel_num, m, n, k, alpha, dA, dB, beta, dC, handle);
+    run_gemm_kernel(kernel_num, m, n, k, alpha, dA, dB, beta, dC, handle);
     cudaCheck(cudaDeviceSynchronize());
     cudaCheck(cudaGetLastError());
     cudaProfilerStop();
