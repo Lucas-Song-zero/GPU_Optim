@@ -11,3 +11,4 @@
 #include "GEMM/9_autotune_more.cuh"
 
 #include "Attention/Prefill/1_naive_prefill.cuh"
+#include "Attention/Prefill/2_flashattention_qSplit.cuh"

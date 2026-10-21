@@ -17,13 +17,14 @@ TARGET = $(BUILD_DIR)/gemm
 DEBUG_TARGET = $(BUILD_DIR)/gemm_dbg
 NCU_TARGET = $(BUILD_DIR)/gemm_ncu
 ATTN_TARGET = $(BUILD_DIR)/attention_prefill
+ATTN_NCU_TARGET = $(BUILD_DIR)/attention_prefill_ncu
 
 # --- flags ---
 COMMON = -arch=$(ARCH) -std=$(CXXSTD) $(INCLUDES)
 RELEASE = $(COMMON) -O3 -lineinfo
 DEBUG = $(COMMON) -G -lineinfo
 
-.PHONY: all debug run run-debug sanitize clean profile attention run-attention
+.PHONY: all debug run run-debug sanitize clean profile attention run-attention compile_ncu_attn profile-attention
 
 all:
 	@mkdir -p $(BUILD_DIR)
@@ -64,6 +65,14 @@ ATTN_NK ?= 512
 ATTN_D ?= 64
 ATTN_WARMUP ?= 10
 ATTN_REPEAT ?= 50
+
+ATTN_KERNEL ?= 0,1,2
+ATTN_KERNELS := $(subst $(comma),$(space),$(ATTN_KERNEL))
+ATTN_PROFILE_NQ ?= 512
+ATTN_PROFILE_NK ?= 512
+ATTN_PROFILE_D ?= 64
+ATTN_PROFILE_WARMUP ?= 10
+ATTN_PROFILE_TAG := nq$(ATTN_PROFILE_NQ)_nk$(ATTN_PROFILE_NK)_d$(ATTN_PROFILE_D)
 
 attention:
 	@mkdir -p $(BUILD_DIR)
@@ -107,6 +116,38 @@ profile: compile_ncu
 		case "$(PROFILE_FORMAT)" in \
 			*csv*|*all*) $(NCU) -i $(PROFILE_REP_DIR)/kernel_$${k}_$(PROFILE_M).ncu-rep \
 				--csv --page details > $(PROFILE_CSV_DIR)/kernel_$${k}_$(PROFILE_M).csv ;; \
+		esac; \
+	done
+
+compile_ncu_attn:
+	@mkdir -p $(BUILD_DIR)
+	$(NVCC) $(RELEASE) -o $(ATTN_NCU_TARGET) $(SRC_ATTN) $(LIBS)
+
+profile-attention: compile_ncu_attn
+	@mkdir -p $(PROFILE_REP_DIR) $(PROFILE_TXT_DIR) $(PROFILE_CSV_DIR)
+	@for k in $(ATTN_KERNELS); do \
+		echo "=== profiling attention prefill kernel $$k ==="; \
+		$(NCU) --profile-from-start off --launch-count 1 \
+			--section SpeedOfLight \
+			--section ComputeWorkloadAnalysis \
+			--section MemoryWorkloadAnalysis \
+			--section Occupancy \
+			--section SchedulerStats \
+			--section WarpStateStats \
+			--force-overwrite \
+			-o $(PROFILE_REP_DIR)/attn_kernel_$${k}_$(ATTN_PROFILE_TAG) \
+			./$(ATTN_NCU_TARGET) --kernel $$k \
+				--Nq $(ATTN_PROFILE_NQ) --Nk $(ATTN_PROFILE_NK) --d $(ATTN_PROFILE_D) \
+				--warmup $(ATTN_PROFILE_WARMUP) --mode profile; \
+		case "$(PROFILE_FORMAT)" in \
+			*txt*|*all*) $(NCU) -i $(PROFILE_REP_DIR)/attn_kernel_$${k}_$(ATTN_PROFILE_TAG).ncu-rep \
+				--page details --print-details all > $(PROFILE_TXT_DIR)/attn_kernel_$${k}_$(ATTN_PROFILE_TAG).txt; \
+				echo "Warp Stall Breakdown (cycles/issue):" >> $(PROFILE_TXT_DIR)/attn_kernel_$${k}_$(ATTN_PROFILE_TAG).txt; \
+				$(NCU) -i $(PROFILE_REP_DIR)/attn_kernel_$${k}_$(ATTN_PROFILE_TAG).ncu-rep --page raw 2>/dev/null | grep "smsp__average_warps_issue_stalled_.*_per_issue_active.ratio" >> $(PROFILE_TXT_DIR)/attn_kernel_$${k}_$(ATTN_PROFILE_TAG).txt ;; \
+		esac; \
+		case "$(PROFILE_FORMAT)" in \
+			*csv*|*all*) $(NCU) -i $(PROFILE_REP_DIR)/attn_kernel_$${k}_$(ATTN_PROFILE_TAG).ncu-rep \
+				--csv --page details > $(PROFILE_CSV_DIR)/attn_kernel_$${k}_$(ATTN_PROFILE_TAG).csv ;; \
 		esac; \
 	done
 

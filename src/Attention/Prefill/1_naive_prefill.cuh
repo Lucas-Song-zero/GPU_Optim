@@ -9,7 +9,7 @@
 __global__ void prefill_naive(int Nq, int Nk, int d, const float *Q, const float *K, const float *V, float *S, float *P, float *O){
     const float d_sqrt = sqrtf((float)d);
     const uint qRow = blockIdx.x * blockDim.x + threadIdx.x; // each thread handles a row of query
-
+    // float rowMax = 0.0;
     if(qRow < Nq){
         float tmp_s = 0.0;
         float softmax_total = 0.0;

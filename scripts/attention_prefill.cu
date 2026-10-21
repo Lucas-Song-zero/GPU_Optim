@@ -5,6 +5,7 @@
 #include <iostream>
 #include <string>
 
+#include <cuda_profiler_api.h>
 #include <cuda_runtime.h>
 #include <cublas_v2.h>
 
@@ -25,6 +26,8 @@ static void randomize_small(float *mat, int N) {
 int main(int argc, char **argv) {
   int Nq = 512, Nk = 512, d = 64;
   int warmup = 10, repeat = 50;
+  int kernel_num = -1;
+  std::string mode = "benchmark";
 
   for (int i = 1; i < argc; i++) {
     std::string a = argv[i];
@@ -33,10 +36,23 @@ int main(int argc, char **argv) {
     else if (a == "--d") d = std::stoi(argv[++i]);
     else if (a == "--warmup") warmup = std::stoi(argv[++i]);
     else if (a == "--repeat") repeat = std::stoi(argv[++i]);
+    else if (a == "--kernel") kernel_num = std::stoi(argv[++i]);
+    else if (a == "--mode") mode = argv[++i];
     else {
       fprintf(stderr, "unknown argument: %s\n", a.c_str());
       return EXIT_FAILURE;
     }
+  }
+
+  if (mode != "benchmark" && mode != "profile") {
+    fprintf(stderr, "unknown mode: %s (use benchmark or profile)\n",
+            mode.c_str());
+    return EXIT_FAILURE;
+  }
+  if (mode == "profile" && (kernel_num < 0 || kernel_num > 2)) {
+    fprintf(stderr,
+            "profile mode requires --kernel (0=cuBLAS, 1=naive, 2=flash)\n");
+    return EXIT_FAILURE;
   }
 
   int deviceIdx = 0;
@@ -89,13 +105,37 @@ int main(int argc, char **argv) {
                        cudaMemcpyDeviceToHost));
 
   bool ok = verify_matrix(hO_ref, hO, Nq * d);
-  printf("Correctness vs cuBLAS: %s\n", ok ? "PASS" : "FAIL");
+  printf("Correctness (naive) vs cuBLAS: %s\n", ok ? "PASS" : "FAIL");
   if (!ok)
     return EXIT_FAILURE;
 
-  // ---- timing ----
-  float elapsed;
-  cudaEvent_t beg, end;
+  // flash attention
+  run_prefill_kernel(2, Nq, Nk, d, Q, K, V, S, P, O, handle);
+  cudaCheck(cudaDeviceSynchronize());
+  cudaCheck(cudaGetLastError());
+  cudaCheck(cudaMemcpy(hO, O, sizeof(float) * Nq * d, cudaMemcpyDeviceToHost));
+  ok = verify_matrix(hO_ref, hO, Nq * d);
+  printf("Correctness (flash attention) vs cuBLAS: %s\n", ok ? "PASS" : "FAIL");
+  if (!ok)
+    return EXIT_FAILURE;
+
+  if (mode == "profile") {
+    // Warm-up: reach a steady state before profiling.
+    for (int i = 0; i < warmup; i++)
+      run_prefill_kernel(kernel_num, Nq, Nk, d, Q, K, V, S, P, O, handle);
+    cudaCheck(cudaDeviceSynchronize());
+    cudaCheck(cudaGetLastError());
+
+    // Profile exactly one launch.
+    cudaProfilerStart();
+    run_prefill_kernel(kernel_num, Nq, Nk, d, Q, K, V, S, P, O, handle);
+    cudaCheck(cudaDeviceSynchronize());
+    cudaCheck(cudaGetLastError());
+    cudaProfilerStop();
+  } else {
+    // ---- timing ----
+    float elapsed;
+    cudaEvent_t beg, end;
   cudaEventCreate(&beg);
   cudaEventCreate(&end);
 
@@ -113,6 +153,20 @@ int main(int argc, char **argv) {
   long flops = 4L * Nq * Nk * d;
   printf("naive prefill: avg %.4f ms, %.2f GFLOPS\n", t_naive,
          flops * 1e-9 / (t_naive * 1e-3));
+
+  // flash attention kernel
+  for (int i = 0; i < warmup; i++)
+    run_prefill_kernel(2, Nq, Nk, d, Q, K, V, S, P, O, handle);
+  cudaCheck(cudaDeviceSynchronize());
+  cudaEventRecord(beg);
+  for (int i = 0; i < repeat; i++)
+    run_prefill_kernel(2, Nq, Nk, d, Q, K, V, S, P, O, handle);
+  cudaEventRecord(end);
+  cudaEventSynchronize(end);
+  cudaEventElapsedTime(&elapsed, beg, end);
+  float t_flash = elapsed / repeat; // ms
+  printf("flash attention: avg %.4f ms, %.2f GFLOPS\n", t_flash,
+         flops * 1e-9 / (t_flash * 1e-3));
 
   // cuBLAS reference (two GEMMs only; softmax runs on the host and is excluded
   // from the timed GPU loop).
@@ -138,6 +192,7 @@ int main(int argc, char **argv) {
   printf("cuBLAS (2 gemms): avg %.4f ms, %.2f GFLOPS\n", t_cublas,
          flops * 1e-9 / (t_cublas * 1e-3));
   printf("speedup: %.1fx\n", t_naive / t_cublas);
+  }
 
   free(hQ);
   free(hK);

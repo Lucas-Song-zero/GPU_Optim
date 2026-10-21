@@ -266,6 +266,34 @@ void run_prefill_naive(int Nq, int Nk, int d, const float *Q, const float *K,
   prefill_naive<<<blocks, threads>>>(Nq, Nk, d, Q, K, V, S, P, O);
 }
 
+// run fused flash attention (per-warp query split). The head dim D is a
+// template parameter (shared memory must be sized at compile time), so we
+// dispatch over supported values.
+template <int D>
+static void launch_flashattention(int Nq, int Nk, const float *Q,
+                                  const float *K, const float *V, float *O) {
+  const uint TM = 8, TK = 32, NUM_WARPS = 4;
+  dim3 gridDim(div_ceil(Nq, TM * NUM_WARPS));
+  dim3 blockDim(NUM_WARPS * 32);
+  flashattention_TM<TM, TK, D, NUM_WARPS>
+      <<<gridDim, blockDim>>>(Nq, Nk, Q, K, V, O);
+}
+
+void run_prefill_flashattention(int Nq, int Nk, int d, const float *Q,
+                                const float *K, const float *V, float *O) {
+  switch (d) {
+    case 32:
+      launch_flashattention<32>(Nq, Nk, Q, K, V, O);
+      break;
+    case 64:
+      launch_flashattention<64>(Nq, Nk, Q, K, V, O);
+      break;
+    default:
+      throw std::invalid_argument(
+          "flash attention supports d in {32, 64} only");
+  }
+}
+
 // run cuBLAS reference: S = Q K^T / sqrt(d); P = softmax(S); O = P V.
 // softmax is computed on the host (cuBLAS has no softmax), so S/P round-trip
 // through a cached host staging buffer.
@@ -308,6 +336,9 @@ void run_prefill_kernel(int kernel_num, int Nq, int Nk, int d, float *Q,
       break;
     case 1:
       run_prefill_naive(Nq, Nk, d, Q, K, V, S, P, O);
+      break;
+    case 2:
+      run_prefill_flashattention(Nq, Nk, d, Q, K, V, O);
       break;
     default:
       throw std::invalid_argument("Wrong prefill kernel number, undefined");

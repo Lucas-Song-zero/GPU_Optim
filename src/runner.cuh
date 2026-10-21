@@ -25,7 +25,7 @@ float cpu_elapsed_time(float &beg, float &end); // Calculate time difference
 void run_gemm_kernel(int kernel_num, int m, int n, int k, float alpha, float *A,
                 float *B, float beta, float *C, cublasHandle_t handle);
 
-// attention prefill dispatch (0 = cuBLAS reference, 1 = naive)
+// attention prefill dispatch (0 = cuBLAS reference, 1 = naive, 2 = flash attention)
 void run_prefill_kernel(int kernel_num, int Nq, int Nk, int d, float *Q,
                         float *K, float *V, float *S, float *P, float *O,
                         cublasHandle_t handle);
